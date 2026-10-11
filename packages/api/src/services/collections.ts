@@ -111,7 +111,6 @@ export async function createCollectionBatch(
 
   // Calculate expected amounts
   let expectedCash = 0;
-  let expectedNonCash = 0;
 
   for (const sa of serviceAccountsList) {
     // Get unpaid invoices for this service account

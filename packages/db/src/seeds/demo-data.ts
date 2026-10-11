@@ -338,8 +338,6 @@ async function seedDemoData() {
           // Decide payment type: exact, partial, or advance
           const paymentType = Math.random();
           let amount: number;
-          let allocations: any[] = [];
-          
           if (paymentType < 0.4) {
             // Exact payment
             amount = Number(invoice.balance);

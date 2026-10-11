@@ -304,7 +304,32 @@ export async function generateStatementOfAccountPDF(
   dateTo?: Date
 ): Promise<Buffer> {
   const db = fastify.db;
-  return new Promise(async (resolve, reject) => {
+  const subscriber = await db.query.subscribers.findFirst({
+    where: eq(subscribers.id, subscriberId),
+    with: {
+      addresses: true,
+      serviceAccounts: {
+        where: serviceAccountId ? eq(serviceAccounts.id, serviceAccountId) : undefined,
+        with: {
+          plan: true,
+          invoices: {
+            where: and(
+              dateFrom ? gte(invoices.generatedAt, dateFrom) : undefined,
+              dateTo ? lte(invoices.generatedAt, dateTo) : undefined,
+            ),
+            orderBy: desc(invoices.generatedAt),
+            with: {
+              items: true,
+              allocations: { with: { payment: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!subscriber) throw new Error('Subscriber not found');
+
+  return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ margin: 50, size: 'A4' });
       const buffers: Buffer[] = [];
@@ -312,33 +337,6 @@ export async function generateStatementOfAccountPDF(
       doc.on('data', buffers.push.bind(buffers));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
       doc.on('error', reject);
-
-      // Fetch data
-      const subscriber = await db.query.subscribers.findFirst({
-        where: eq(subscribers.id, subscriberId),
-        with: {
-          addresses: true,
-          serviceAccounts: {
-            where: serviceAccountId ? eq(serviceAccounts.id, serviceAccountId) : undefined,
-            with: {
-              plan: true,
-              invoices: {
-                where: and(
-                  dateFrom ? gte(invoices.generatedAt, dateFrom) : undefined,
-                  dateTo ? lte(invoices.generatedAt, dateTo) : undefined,
-                ),
-                orderBy: desc(invoices.generatedAt),
-                with: {
-                  items: true,
-                  allocations: { with: { payment: true } },
-                },
-              },
-            },
-          },
-        },
-      });
-
-      if (!subscriber) throw new Error('Subscriber not found');
 
       const primaryAddress = subscriber.addresses.find(a => a.isPrimary) || subscriber.addresses[0];
       const addressStr = primaryAddress 

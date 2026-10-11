@@ -168,7 +168,11 @@ export const UpdatePlanRequestSchema = PlanRequestSchema.partial().omit({ code: 
 export const PlanSearchSchema = PaginationSchema.extend({
   query: z.string().optional(),
   type: z.enum(['internet', 'cable', 'combo']).optional(),
-  isActive: z.boolean().optional(),
+  isActive: z.preprocess((value) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  }, z.boolean()).optional(),
 });
 
 // ============================================

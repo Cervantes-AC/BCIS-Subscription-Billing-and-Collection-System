@@ -76,6 +76,7 @@ export function BillingPage() {
   const [selectedCycle, setSelectedCycle] = useState<BillingCycle | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showCreateCycle, setShowCreateCycle] = useState(false);
 
   const { data: cyclesData } = useQuery({
     queryKey: ['billing-cycles'],
@@ -89,7 +90,7 @@ export function BillingPage() {
 
   const { data: plans } = useQuery({
     queryKey: ['plans'],
-    queryFn: () => api.listPlans({ isActive: true, limit: 200 }),
+    queryFn: () => api.listPlans({ isActive: true, limit: 100 }),
   });
 
   const generateMutation = useMutation({
@@ -363,8 +364,6 @@ export function BillingPage() {
     </section>
   );
 }
-
-const [showCreateCycle, setShowCreateCycle] = useState(false);
 
 function GenerateBillingForm({ cycles, plans, onGenerate, isGenerating, setActiveTab }: any) {
   const [formData, setFormData] = useState({

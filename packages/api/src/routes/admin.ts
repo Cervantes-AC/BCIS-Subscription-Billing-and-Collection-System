@@ -17,7 +17,15 @@ export async function adminRoutes(fastify: FastifyInstance) {
   const app = fastify.withTypeProvider<ZodTypeProvider>();
   // Settings
   app.get('/settings', {
-    schema: { querystring: z.object({ publicOnly: z.boolean().default(false) }) },
+    schema: {
+      querystring: z.object({
+        publicOnly: z.preprocess((value) => {
+          if (value === 'true') return true;
+          if (value === 'false') return false;
+          return value;
+        }, z.boolean()).default(false),
+      }),
+    },
     preHandler: fastify.authorize('admin.settings'),
   }, async (request, reply) => {
     const query = request.query as any;

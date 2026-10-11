@@ -58,11 +58,13 @@ export function App() {
         user={user}
         sidebarCollapsed={sidebarCollapsed}
         onToggleSidebar={(sidebar: boolean) => useStore.getState().setSidebarCollapsed(sidebar)}
-        onLogout={() => {
-          api.logout()
-            .then(() => navigate('/login'))
-            .catch(() => navigate('/login'));
-        }}
+          onLogout={() => {
+            void api.logout().catch(() => undefined).finally(() => {
+              clearUser();
+              queryClient.clear();
+              navigate('/login', { replace: true });
+            });
+          }}
       />
       <div className="flex min-h-screen">
         {/* Sidebar */}

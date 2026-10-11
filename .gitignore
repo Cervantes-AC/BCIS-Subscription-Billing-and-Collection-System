@@ -3,6 +3,8 @@ dist/
 out/
 .electron-vite/
 coverage/
+test-results/
+playwright-report/
 *.tsbuildinfo
 .env
 .env.*

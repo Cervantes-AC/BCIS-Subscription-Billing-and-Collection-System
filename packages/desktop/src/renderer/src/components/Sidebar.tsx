@@ -25,6 +25,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const store = useStore.getState();
   const sidebarCollapsed = collapsed ?? store.sidebarCollapsed;
   const { user } = useAuthStore();
+  const clearUser = useAuthStore((state) => state.clearUser);
 
   const navItems: NavItem[] = [
     { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
@@ -89,7 +90,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Footer with logout */}
       <div className="p-3 border-t border-border text-xs text-text-secondary">
         <button
-          onClick={() => void api.logout()}
+                onClick={() => {
+                  void api.logout().catch(() => undefined).finally(() => {
+                    clearUser();
+                    navigate('/login', { replace: true });
+                  });
+                }}
           className="w-full text-left px-2 py-1.5 rounded hover:bg-gray-50 transition-colors flex items-center gap-2"
           aria-label="Logout"
         >

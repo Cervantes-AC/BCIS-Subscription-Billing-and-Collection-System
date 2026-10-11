@@ -96,7 +96,7 @@ export async function calculateAging(
   const db = fastify.db;
   
   // Build base query for active service accounts with unpaid invoices
-  let saConditions = [eq(serviceAccounts.status, 'active')];
+  const saConditions = [eq(serviceAccounts.status, 'active')];
   
   if (filters?.collectorId) saConditions.push(eq(serviceAccounts.collectorId, filters.collectorId));
   if (filters?.planId) saConditions.push(eq(serviceAccounts.planId, filters.planId));
@@ -244,12 +244,11 @@ export async function calculateAging(
       const balance = Number(inv.balance);
       const daysOverdue = Math.floor((asOfDate.getTime() - new Date(inv.dueDate).getTime()) / (1000 * 60 * 60 * 24));
       
-      let bucketIndex = 0;
-      if (daysOverdue <= 0) bucketIndex = 0; // Current
-      else if (daysOverdue <= 30) bucketIndex = 1;
-      else if (daysOverdue <= 60) bucketIndex = 2;
-      else if (daysOverdue <= 90) bucketIndex = 3;
-      else bucketIndex = 4;
+      const bucketIndex = daysOverdue <= 0 ? 0
+        : daysOverdue <= 30 ? 1
+        : daysOverdue <= 60 ? 2
+        : daysOverdue <= 90 ? 3
+        : 4;
 
       saAgingBuckets[bucketIndex].count++;
       saAgingBuckets[bucketIndex].amount += balance;

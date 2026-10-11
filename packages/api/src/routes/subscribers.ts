@@ -211,7 +211,7 @@ export async function subscriberRoutes(fastify: FastifyInstance) {
     schema: {
       querystring: z.object({
         q: z.string().min(1),
-        limit: z.number().int().min(1).max(50).default(10),
+        limit: z.coerce.number().int().min(1).max(50).default(10),
       }),
     },
     preHandler: fastify.authorize('subscriber.view'),

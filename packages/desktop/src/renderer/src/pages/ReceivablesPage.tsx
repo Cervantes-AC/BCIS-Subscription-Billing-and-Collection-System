@@ -69,7 +69,13 @@ export function ReceivablesPage() {
 
   const { data: agingData } = useQuery({
     queryKey: ['receivables', 'aging', filters],
-    queryFn: () => api.getAgingReport(filters),
+    queryFn: () => api.getAgingReport({
+      asOfDate: new Date().toISOString(),
+      collectorId: filters.collectorId,
+      areaId: filters.areaId,
+      planId: filters.planId,
+      serviceType: filters.serviceType,
+    }),
   });
 
   const { data: overdueData } = useQuery({

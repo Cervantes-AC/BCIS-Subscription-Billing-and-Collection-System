@@ -36,3 +36,21 @@ To verify a real backup/restore cycle, set `BCIS_DISPOSABLE_DATABASE_URL` to tha
 ```
 
 The script refuses source database names without `test`, `acceptance`, or `disposable`, writes comparison evidence, and retains the dump and restored database for inspection. See [AT-09 evidence](evidence-AT09.md), [latest AT-12 restore evidence](evidence-restore-20261011_132344.md), and the [three-PC checklist](lan-validation.md).
+
+## Desktop end-to-end check
+
+The Playwright Electron smoke test performs a real sign-in against a running API and synthetic database, confirms seeded subscriber data loads, visits each operational screen including Administration, and signs out. It creates a login session but makes no billing or collection changes. Use a seeded disposable database and an account authorized for all screens. Set `BCIS_E2E_DATABASE_NAME` to the database name; the test refuses names that do not include `test`, `acceptance`, or `disposable`.
+
+In PowerShell, with the API running against that database:
+
+```powershell
+$env:BCIS_E2E_API_URL = 'http://127.0.0.1:3310/api/v1'
+$env:BCIS_E2E_DATABASE_NAME = 'bcis_acceptance_test'
+$env:BCIS_E2E_USERNAME = 'admin'
+$env:BCIS_E2E_PASSWORD = '<test account password>'
+$env:VITE_API_URL = $env:BCIS_E2E_API_URL
+pnpm --filter @bcis/desktop build
+pnpm test:e2e
+```
+
+Do not use production credentials or point this check at a live database. The test stores failure screenshots and traces under the ignored `test-results` directory. See [desktop smoke evidence](desktop-validation.md) for the latest result and remaining transaction/LAN checks.

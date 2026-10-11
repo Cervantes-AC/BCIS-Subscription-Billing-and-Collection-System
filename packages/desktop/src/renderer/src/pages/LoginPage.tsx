@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { formatCurrency } from '../lib/utils';
+import { useAuthStore } from '../stores/useAuthStore';
 
 export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const setUser = useAuthStore((state) => state.setUser);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,8 +19,8 @@ export function LoginPage() {
       const response = await api.login(username, password, true);
 
       if (response.success && response.data) {
-        // Tokens are stored in the API client
-        navigate('/dashboard');
+        setUser(response.data.user);
+        navigate('/dashboard', { replace: true });
       } else {
         alert('Invalid username or password');
       }

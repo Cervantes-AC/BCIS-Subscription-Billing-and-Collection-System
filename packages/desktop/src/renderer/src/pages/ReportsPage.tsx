@@ -76,17 +76,17 @@ export function ReportsPage() {
 
   const { data: collectors } = useQuery({
     queryKey: ['collectors'],
-    queryFn: () => api.listUsers({ role: 'collector', limit: 200 }),
+    queryFn: () => api.listCollectionCollectors(),
   });
 
   const { data: areas } = useQuery({
     queryKey: ['collection-areas'],
-    queryFn: () => api.listCollectionAreas({ limit: 200 }),
+    queryFn: () => api.listCollectionAreas({ limit: 100 }),
   });
 
   const { data: subscribers } = useQuery({
     queryKey: ['subscribers', 'all'],
-    queryFn: () => api.searchSubscribers({ q: '', limit: 200 }),
+    queryFn: () => api.listSubscribers({ page: 1, limit: 100 }),
   });
 
   const handleGenerateReport = async (reportType: ReportType, params: Record<string, any>) => {

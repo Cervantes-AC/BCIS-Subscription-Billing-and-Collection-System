@@ -180,7 +180,7 @@ export async function createPayment(
 
   // Validate allocations if provided
   let allocationsToUse = data.allocations;
-  let totalAllocated = 0;
+  let totalAllocated: number;
 
   if (allocationsToUse && allocationsToUse.length > 0) {
     totalAllocated = allocationsToUse.reduce((sum, a) => sum + a.amount, 0);

@@ -44,7 +44,7 @@ class ApiClient {
     const url = new URL(`${this.baseUrl}${path}`);
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
+        if (value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '')) {
           url.searchParams.append(key, String(value));
         }
       });
@@ -57,13 +57,13 @@ class ApiClient {
     
     const url = this.buildUrl(path, params);
     
-    const requestHeaders: HeadersInit = {
-      'Content-Type': 'application/json',
-      ...headers,
-    };
+    const requestHeaders = new Headers(headers);
+    if (fetchOptions.body !== undefined && !requestHeaders.has('Content-Type')) {
+      requestHeaders.set('Content-Type', 'application/json');
+    }
 
     if (this.accessToken) {
-      (requestHeaders as Record<string, string>)['Authorization'] = `Bearer ${this.accessToken}`;
+      requestHeaders.set('Authorization', `Bearer ${this.accessToken}`);
     }
 
     const response = await fetch(url, {
@@ -285,7 +285,7 @@ class ApiClient {
   }
 
   async listCollectionCollectors() {
-    return this.request('/collection-collectors');
+    return (await this.request<any>('/collection-collectors')).data;
   }
 
   // Billing Cycles

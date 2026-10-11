@@ -37,7 +37,7 @@ export async function receivablesRoutes(fastify: FastifyInstance) {
   });
 
   app.get('/receivables/overdue', {
-    schema: { querystring: PaginationSchema.extend({ collectorId: UUIDSchema.optional(), areaId: UUIDSchema.optional(), planId: UUIDSchema.optional(), serviceType: z.enum(['internet', 'cable', 'combo']).optional(), minMonthsUnpaid: z.number().int().min(0).optional(), maxMonthsUnpaid: z.number().int().min(0).optional() }) },
+    schema: { querystring: PaginationSchema.extend({ collectorId: UUIDSchema.optional(), areaId: UUIDSchema.optional(), planId: UUIDSchema.optional(), serviceType: z.enum(['internet', 'cable', 'combo']).optional(), minMonthsUnpaid: z.coerce.number().int().min(0).optional(), maxMonthsUnpaid: z.coerce.number().int().min(0).optional() }) },
     preHandler: fastify.authorize('receivables.view'),
   }, async (request, reply) => {
     const query = request.query as any;

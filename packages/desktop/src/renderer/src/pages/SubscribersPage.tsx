@@ -43,17 +43,17 @@ export function SubscribersPage() {
 
   const { data: areas } = useQuery({
     queryKey: ['collection-areas'],
-    queryFn: () => api.listCollectionAreas({ limit: 200 }),
+    queryFn: () => api.listCollectionAreas({ limit: 100 }),
   });
 
   const { data: collectors } = useQuery({
     queryKey: ['collectors'],
-    queryFn: () => api.listUsers({ role: 'collector', limit: 200 }),
+    queryFn: () => api.listCollectionCollectors(),
   });
 
   const { data: plans } = useQuery({
     queryKey: ['plans'],
-    queryFn: () => api.listPlans({ isActive: true, limit: 200 }),
+    queryFn: () => api.listPlans({ isActive: true, limit: 100 }),
   });
 
   const createMutation = useMutation({

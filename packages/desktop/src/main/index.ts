@@ -6,6 +6,8 @@ import { app, BrowserWindow, ipcMain, session } from 'electron';
 import { join } from 'path';
 import { is } from '@electron-toolkit/utils';
 
+declare const __BCIS_API_ORIGIN__: string;
+
 // Security settings
 app.commandLine.appendSwitch('disable-http-cache');
 app.commandLine.appendSwitch('enable-features', 'SharedArrayBuffer');
@@ -70,7 +72,7 @@ if (!app.requestSingleInstanceLock()) {
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:",
+            `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ${__BCIS_API_ORIGIN__}`,
           ],
         },
       });

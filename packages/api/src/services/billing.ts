@@ -201,7 +201,7 @@ export async function generateMonthlyBilling(
       const firstInstallationFee = isFirstBilling ? sa.plan.installationFee : 0;
 
       // Calculate penalty if overdue
-      let penalty = 0;
+      const penalty = 0;
       
       const totalAmount = subscriptionCharge + firstInstallationFee + reconnectionFee + penalty;
       const balance = totalAmount;
