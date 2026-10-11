@@ -29,12 +29,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   const navItems: NavItem[] = [
     { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-    { key: 'subscribers', label: 'Subscribers', icon: <Users className="w-5 h-5" /> },
-    { key: 'billing', label: 'Billing', icon: <FileText className="w-5 h-5" /> },
-    { key: 'payments', label: 'Payments', icon: <CreditCard className="w-5 h-5" /> },
-    { key: 'collections', label: 'Collections', icon: <Truck className="w-5 h-5" /> },
-    { key: 'receivables', label: 'Receivables', icon: <AlertTriangle className="w-5 h-5" /> },
-    { key: 'reports', label: 'Reports', icon: <BarChart2 className="w-5 h-5" /> },
+    { key: 'subscribers', label: 'Subscribers', icon: <Users className="w-5 h-5" />, permission: 'subscriber.view' },
+    { key: 'billing', label: 'Billing', icon: <FileText className="w-5 h-5" />, permission: 'billing.view' },
+    { key: 'payments', label: 'Payments', icon: <CreditCard className="w-5 h-5" />, permission: 'payment.view' },
+    { key: 'collections', label: 'Collections', icon: <Truck className="w-5 h-5" />, permission: 'collection.view' },
+    { key: 'receivables', label: 'Receivables', icon: <AlertTriangle className="w-5 h-5" />, permission: 'receivables.view' },
+    { key: 'reports', label: 'Reports', icon: <BarChart2 className="w-5 h-5" />, permission: 'report.view' },
     { key: 'admin', label: 'Administration', icon: <Settings className="w-5 h-5" />, permission: 'admin.user.manage' },
   ];
 

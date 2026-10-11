@@ -15,6 +15,7 @@ class ApiClient {
   private baseUrl: string;
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
+  private refreshPromise: Promise<boolean> | null = null;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
@@ -40,6 +41,11 @@ class ApiClient {
     localStorage.removeItem('refreshToken');
   }
 
+  private expireSession() {
+    this.clearTokens();
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('bcis:session-expired'));
+  }
+
   private buildUrl(path: string, params?: Record<string, any>): string {
     const url = new URL(`${this.baseUrl}${path}`);
     if (params) {
@@ -52,7 +58,7 @@ class ApiClient {
     return url.toString();
   }
 
-  private async request<T>(path: string, options: RequestOptions = {}): Promise<ApiResponse<T>> {
+  private async request<T>(path: string, options: RequestOptions = {}, alreadyRetried = false): Promise<ApiResponse<T>> {
     const { params, headers, ...fetchOptions } = options;
     
     const url = this.buildUrl(path, params);
@@ -72,12 +78,12 @@ class ApiClient {
     });
 
     // Handle token refresh
-    if (response.status === 401 && this.refreshToken && !path.includes('/auth/')) {
-      const refreshed = await this.refreshAccessToken();
-      if (refreshed) {
-        // Retry with new token
-        return this.request<T>(path, options);
+    const isTokenEndpoint = ['/auth/login', '/auth/refresh', '/auth/logout'].includes(path);
+    if (response.status === 401 && !isTokenEndpoint) {
+      if (this.refreshToken && !alreadyRetried && await this.refreshAccessToken()) {
+        return this.request<T>(path, options, true);
       }
+      this.expireSession();
     }
 
     const data = await response.json().catch(() => ({})) as ApiResponse<T>;
@@ -89,7 +95,16 @@ class ApiClient {
     return data;
   }
 
-  private async refreshAccessToken(): Promise<boolean> {
+  private refreshAccessToken(): Promise<boolean> {
+    if (!this.refreshPromise) {
+      this.refreshPromise = this.performTokenRefresh().finally(() => {
+        this.refreshPromise = null;
+      });
+    }
+    return this.refreshPromise;
+  }
+
+  private async performTokenRefresh(): Promise<boolean> {
     try {
       const response = await fetch(`${this.baseUrl}/auth/refresh`, {
         method: 'POST',
@@ -416,14 +431,29 @@ class ApiClient {
   }
 
   // Reports
-  async exportReport(type: string, params: any) {
-    const response = await fetch(this.buildUrl(`/reports/export/${type}`, params), {
+  private async download(url: string, alreadyRetried = false): Promise<ArrayBuffer> {
+    const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${this.accessToken}`,
-      },
+      headers: { 'Authorization': `Bearer ${this.accessToken}` },
     });
+
+    if (response.status === 401) {
+      if (this.refreshToken && !alreadyRetried && await this.refreshAccessToken()) {
+        return this.download(url, true);
+      }
+      this.expireSession();
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!response.ok || contentType.includes('application/json')) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.error?.message || payload?.message || `Download failed with status ${response.status}`);
+    }
     return response.arrayBuffer();
+  }
+
+  async exportReport(type: string, params: any) {
+    return this.download(this.buildUrl(`/reports/export/${type}`, params));
   }
 
   async getStatementOfAccountPDF(subscriberId: string, serviceAccountId?: string, dateFrom?: string, dateTo?: string) {
@@ -432,13 +462,7 @@ class ApiClient {
     if (dateFrom) params.dateFrom = dateFrom;
     if (dateTo) params.dateTo = dateTo;
 
-    const response = await fetch(this.buildUrl(`/subscribers/${subscriberId}/statement`, params), {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${this.accessToken}`,
-      },
-    });
-    return response.arrayBuffer();
+    return this.download(this.buildUrl(`/subscribers/${subscriberId}/statement`, params));
   }
 
   getAccessToken() {

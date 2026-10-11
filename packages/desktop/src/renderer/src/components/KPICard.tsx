@@ -6,17 +6,14 @@ export function KPICard({
   value,
   change,
   changeType,
-  icon,
 }: {
   id: string;
   title: string;
   value: string;
   change: string;
-  changeType: 'positive' | 'negative';
-  icon: string;
+  changeType: 'positive' | 'negative' | 'neutral';
 }) {
-  const changeClass = changeType === 'positive' ? 'text-success' : 'text-danger';
-  const changeIcon = changeType === 'positive' ? 'TrendingUp' : 'TrendingDown';
+  const changeClass = changeType === 'positive' ? 'text-success' : changeType === 'negative' ? 'text-danger' : 'text-text-secondary';
 
   return (
     <div className="kpi-card p-5 rounded-lg border border-border">

@@ -1,60 +1,41 @@
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { formatCurrency } from '@bcis/shared';
+import { api } from '../lib/api';
 import { useAuthStore } from '../stores/useAuthStore';
-import { useAppStore } from '../stores/useStore';
 import { KPICard } from './KPICard';
 
-export function KPICards() {
-  const { user } = useAuthStore();
-  const sidebarCollapsed = useAppStore.getState().sidebarCollapsed;
+interface DashboardStats {
+  activeSubscribers: number;
+  totalReceivable: number;
+  monthlyCollections: number;
+  overdueAccounts: number;
+}
 
-  // Mock KPI data - will be replaced with API calls
-  const kpis: Array<{
-    id: string;
-    title: string;
-    value: string;
-    change: string;
-    changeType: 'positive' | 'negative';
-    icon: string;
-  }> = [
-    {
-      id: 'total-subscribers',
-      title: 'Total Subscribers',
-      value: '50',
-      change: '+12 this month',
-      changeType: 'positive',
-      icon: 'Users',
-    },
-    {
-      id: 'total-receivable',
-      title: 'Total Receivable',
-      value: '₱125,400.00',
-      change: '+₱8,200.00',
-      changeType: 'positive',
-      icon: 'TrendingUp',
-    },
-    {
-      id: 'monthly-collection',
-      title: 'Monthly Collection',
-      value: '₱89,200.00',
-      change: '+₱5,600.00',
-      changeType: 'positive',
-      icon: 'Cash',
-    },
-    {
-      id: 'overdue-accounts',
-      title: 'Overdue Accounts',
-      value: '12',
-      change: '+3 this month',
-      changeType: 'negative',
-      icon: 'AlertCircle',
-    },
+export function KPICards() {
+  const hasReportPermission = useAuthStore((state) => state.hasPermission('report.view'));
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => api.get<DashboardStats>('/reports/dashboard'),
+    enabled: hasReportPermission,
+  });
+
+  if (!hasReportPermission) return null;
+  if (isLoading) return <p className="text-sm text-text-secondary">Loading dashboard totals…</p>;
+  if (error || !data?.data) {
+    return <p role="alert" className="text-sm text-red-700">Could not load dashboard totals. Check the API connection and your report access.</p>;
+  }
+
+  const kpis = [
+    { id: 'total-subscribers', title: 'Active Subscribers', value: String(data.data.activeSubscribers), change: 'Current total', changeType: 'neutral' as const },
+    { id: 'total-receivable', title: 'Total Receivable', value: formatCurrency(data.data.totalReceivable), change: 'Outstanding balance', changeType: 'neutral' as const },
+    { id: 'monthly-collection', title: 'Monthly Collection', value: formatCurrency(data.data.monthlyCollections), change: 'Collected this month', changeType: 'neutral' as const },
+    { id: 'overdue-accounts', title: 'Overdue Accounts', value: String(data.data.overdueAccounts), change: 'With past due invoices', changeType: 'negative' as const },
   ];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      {kpis.map((kpi) => (
-        <KPICard key={kpi.id} {...kpi} />
-      ))}
+      {kpis.map((kpi) => <KPICard key={kpi.id} {...kpi} />)}
     </div>
   );
 }

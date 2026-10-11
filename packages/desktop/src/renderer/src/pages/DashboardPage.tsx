@@ -12,8 +12,6 @@ export function DashboardPage() {
         Welcome back, {user?.fullName || 'User'}. Here's an overview of your BCIS operations.
       </p>
       <KPICards />
-      {/* Additional dashboard content would go here */}
-      <p className="mt-8 text-text-muted">Dashboard content placeholder</p>
     </div>
   );
 }

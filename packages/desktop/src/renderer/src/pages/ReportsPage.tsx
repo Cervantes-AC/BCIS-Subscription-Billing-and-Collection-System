@@ -99,7 +99,7 @@ export function ReportsPage() {
         case 'monthly-collection': {
           const buffer = await api.exportReport('collection', {
             format: 'xlsx',
-            date: params.month,
+            date: `${params.month}-01`,
             collectorId: params.collectorId,
             areaId: params.areaId,
           });
@@ -143,8 +143,8 @@ export function ReportsPage() {
           const buffer = await api.getStatementOfAccountPDF(
             params.subscriberId,
             params.serviceAccountId,
-            params.dateFrom,
-            params.dateTo
+            params.dateFrom ? new Date(`${params.dateFrom}T00:00:00`).toISOString() : undefined,
+            params.dateTo ? new Date(`${params.dateTo}T23:59:59.999`).toISOString() : undefined
           );
           blob = new Blob([buffer], { type: 'application/pdf' });
           filename = `statement-${params.subscriberId}-${params.dateFrom || 'all'}.pdf`;
@@ -272,12 +272,12 @@ export function ReportsPage() {
               <label className="block text-sm font-medium mb-2">Subscriber <span className="text-red-500">*</span></label>
               <select
                 value={reportParams[param] || ''}
-                onChange={(e) => setReportParams({ ...reportParams, [param]: e.target.value })}
+                onChange={(e) => setReportParams({ ...reportParams, [param]: e.target.value, serviceAccountId: '' })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                 required
               >
                 <option value="">Select Subscriber</option>
-                {(subscribers as any)?.subscribers?.map((s: any) => (
+                {(subscribers as any)?.items?.map((s: any) => (
                   <option key={s.id} value={s.id}>
                     {s.accountNumber} - {s.firstName} {s.lastName}
                   </option>
@@ -296,7 +296,13 @@ export function ReportsPage() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg"
               >
                 <option value="">All Service Accounts</option>
-                {/* Would filter by selected subscriber */}
+                {((subscribers as any)?.items || [])
+                  .find((subscriber: any) => subscriber.id === reportParams.subscriberId)
+                  ?.serviceAccounts?.map((account: any) => (
+                    <option key={account.id} value={account.id}>
+                      {account.accountNumber} - {account.plan?.name || account.status}
+                    </option>
+                  ))}
               </select>
             </div>
           );

@@ -174,7 +174,7 @@ export async function receivablesRoutes(fastify: FastifyInstance) {
 
   // Statement of Account
   app.get('/subscribers/:id/statement', {
-    schema: { params: z.object({ id: UUIDSchema }), querystring: StatementOfAccountRequestSchema },
+    schema: { params: z.object({ id: UUIDSchema }), querystring: StatementOfAccountRequestSchema.omit({ subscriberId: true }) },
     preHandler: fastify.authorize('subscriber.view'),
   }, async (request, reply) => {
     const query = request.query as any;

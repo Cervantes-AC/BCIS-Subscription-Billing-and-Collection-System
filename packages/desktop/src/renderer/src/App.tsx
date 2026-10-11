@@ -2,18 +2,16 @@
  * BCIS Desktop Client - Main App Component
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useStore } from './stores/useStore';
 import api from './lib/api';
-import { formatCurrency, formatCentavos } from '@bcis/shared';
 
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { useAuthStore } from './stores/useAuthStore';
 import { usePermission } from './hooks/usePermission';
-import { KPICards } from './components/KPICards';
 import { DashboardPage } from './pages/DashboardPage';
 import { SubscribersPage } from './pages/SubscribersPage';
 import { BillingPage } from './pages/BillingPage';
@@ -29,11 +27,48 @@ export function App() {
   const queryClient = useQueryClient();
   const { user, isLoading, setUser, clearUser, hasPermission } = useAuthStore();
   const { sidebarCollapsed } = useStore();
+  const [sessionReady, setSessionReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const restoreSession = async () => {
+      if (!api.isAuthenticated()) {
+        clearUser();
+        setSessionReady(true);
+        return;
+      }
+
+      try {
+        const response = await api.getCurrentUser();
+        if (cancelled) return;
+        if (response.success && response.data?.user) setUser(response.data.user);
+        else clearUser();
+      } catch {
+        if (!cancelled) clearUser();
+      } finally {
+        if (!cancelled) setSessionReady(true);
+      }
+    };
+
+    void restoreSession();
+    const handleSessionExpired = () => {
+      clearUser();
+      queryClient.clear();
+    };
+    window.addEventListener('bcis:session-expired', handleSessionExpired);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('bcis:session-expired', handleSessionExpired);
+    };
+  }, [clearUser, queryClient, setUser]);
 
   // Check permissions hook
   usePermission(hasPermission);
 
-  if (isLoading) {
+  const authorizedPage = (permission: string, page: React.ReactNode) =>
+    hasPermission(permission) ? page : <Navigate to="/dashboard" replace />;
+
+  if (isLoading || !sessionReady) {
     return (
       <div className="flex items-center justify-center h-full">
         <span className="text-text-secondary">Loading...</span>
@@ -77,7 +112,6 @@ export function App() {
             path="/"
             element={
               <div className="content-area">
-                <KPICards />
                 <DashboardPage />
               </div>
             }
@@ -86,18 +120,17 @@ export function App() {
             path="/dashboard"
             element={
               <div className="content-area">
-                <KPICards />
                 <DashboardPage />
               </div>
             }
           />
-          <Route path="/subscribers" element={<SubscribersPage />} />
-          <Route path="/billing" element={<BillingPage />} />
-          <Route path="/payments" element={<PaymentsPage />} />
-          <Route path="/collections" element={<CollectionsPage />} />
-          <Route path="/receivables" element={<ReceivablesPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/subscribers" element={authorizedPage('subscriber.view', <SubscribersPage />)} />
+          <Route path="/billing" element={authorizedPage('billing.view', <BillingPage />)} />
+          <Route path="/payments" element={authorizedPage('payment.view', <PaymentsPage />)} />
+          <Route path="/collections" element={authorizedPage('collection.view', <CollectionsPage />)} />
+          <Route path="/receivables" element={authorizedPage('receivables.view', <ReceivablesPage />)} />
+          <Route path="/reports" element={authorizedPage('report.view', <ReportsPage />)} />
+          <Route path="/admin" element={authorizedPage('admin.user.manage', <AdminPage />)} />
         </Routes>
       </main>
     </div>
