@@ -8,6 +8,8 @@ import { getDb, closeDb, transaction } from '../index';
 import * as schema from '@bcis/db/schema';
 import { eq, and, inArray, desc } from 'drizzle-orm';
 import { subDays, addDays, addMonths, startOfMonth, endOfMonth, format } from 'date-fns';
+import bcrypt from 'bcryptjs';
+import { ensureDemoCollectors } from './demo-collectors';
 
 async function seedDemoData() {
   const db = getDb();
@@ -23,38 +25,30 @@ async function seedDemoData() {
       
       const plans = await tx.query.servicePlans.findMany();
       const areas = await tx.query.collectionAreas.findMany();
-      const supervisorRole = await tx.query.roles.findFirst({ where: eq(schema.roles.name, 'collection_supervisor') });
-      const collectors = await tx.query.users.findMany({
-        where: eq(schema.users.roleId, supervisorRole?.id || ''),
-      });
+      const collectorRole = await tx.query.roles.findFirst({ where: eq(schema.roles.name, 'field_collector') });
       const adminUser = await tx.query.users.findFirst({ where: eq(schema.users.username, 'admin') });
       
       if (!adminUser) throw new Error('Admin user not found');
       if (plans.length === 0) throw new Error('No plans found - run basic seed first');
       if (areas.length === 0) throw new Error('No areas found - run basic seed first');
-      if (collectors.length === 0) throw new Error('No collectors found - run basic seed first');
+      if (!collectorRole) throw new Error('Field collector role not found - run the basic seed first');
+
+      // Demo collectors are separate, least-privilege users; do not reuse the
+      // collection supervisor as a field collector in the sample dataset.
+      const demoCollectorPasswordHash = await bcrypt.hash('admin123', 12);
+      const collectors = await ensureDemoCollectors(tx, collectorRole.id, demoCollectorPasswordHash);
 
       const planMap = new Map(plans.map(p => [p.code, p]));
       const areaMap = new Map(areas.map(a => [a.code, a]));
-      const collector1 = collectors[0];
-      const collector2 = collectors[1] || collectors[0];
+      const batchCollector = collectors[0];
 
       // Assign collectors to areas
-      if (collector1) {
+      for (const [index, areaCode] of ['AREA-01', 'AREA-02', 'AREA-03'].entries()) {
         await tx.update(schema.collectionAreas)
-          .set({ collectorId: collector1.id })
-          .where(eq(schema.collectionAreas.code, 'AREA-01'));
+          .set({ collectorId: collectors[index].id })
+          .where(eq(schema.collectionAreas.code, areaCode));
       }
-      if (collector2) {
-        await tx.update(schema.collectionAreas)
-          .set({ collectorId: collector2.id })
-          .where(eq(schema.collectionAreas.code, 'AREA-02'));
-      }
-      if (collector1) {
-        await tx.update(schema.collectionAreas)
-          .set({ collectorId: collector1.id })
-          .where(eq(schema.collectionAreas.code, 'AREA-03'));
-      }
+      console.log('Created/found 3 distinct field collectors and assigned one to each demo area');
 
       // ============================================
       // 1. Create 50 Subscribers with addresses
@@ -666,8 +660,8 @@ async function seedDemoData() {
       // ============================================
       console.log('Creating collection batches...');
       
-      if (collector1 && areas.length > 0) {
-        // Get active service accounts in collector1's area
+      if (areas.length > 0) {
+        // Get active service accounts in the first demo collector's area
         const areaSubs = await tx.query.subscribers.findMany({
           where: and(
             eq(schema.subscribers.collectionAreaId, areas[0].id),
@@ -693,7 +687,7 @@ async function seedDemoData() {
           
           const [batch] = await tx.insert(schema.collectionBatches).values({
             batchNumber,
-            collectorId: collector1.id,
+            collectorId: batchCollector.id,
             areaId: areas[0].id,
             status: 'reconciled',
             collectionDate: format(batchDate, 'yyyy-MM-dd'),
@@ -706,9 +700,9 @@ async function seedDemoData() {
             openedBy: adminUser.id,
             openedAt: new Date(batchDate.getTime() + 8 * 60 * 60 * 1000),
             submittedAt: new Date(batchDate.getTime() + 16 * 60 * 60 * 1000),
-            submittedBy: collector1.id,
+            submittedBy: batchCollector.id,
             remittedAt: new Date(batchDate.getTime() + 17 * 60 * 60 * 1000),
-            remittedBy: collector1.id,
+            remittedBy: batchCollector.id,
             reconciledAt: new Date(),
             reconciledBy: adminUser.id,
             notes: `Collection for ${areas[0].name} on ${format(batchDate, 'MMMM d, yyyy')}`,
@@ -747,11 +741,11 @@ async function seedDemoData() {
           // Create remittance record
           await tx.insert(schema.collectorRemittances).values({
             batchId: batch.id,
-            collectorId: collector1.id,
+            collectorId: batchCollector.id,
             cashAmount: 4950000,
             nonCashAmount: 1000000,
             remittanceDate: format(batchDate, 'yyyy-MM-dd'),
-            remittedBy: collector1.id,
+            remittedBy: batchCollector.id,
             receivedBy: adminUser.id,
             notes: 'Remitted to office',
           });

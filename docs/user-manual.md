@@ -4,6 +4,8 @@
 
 Start the BCIS desktop client and sign in with an account created by an administrator. The initial development seed creates `admin` with the temporary password `admin123`; change it before any shared or production use. Your role controls which screens and server actions are available.
 
+After loading demo data into a disposable database, the demo seed adds three field-collector accounts: `demo_collector_01`, `demo_collector_02`, and `demo_collector_03`. Their initial password is `admin123`. These are synthetic demonstration users; do not use these accounts or passwords for a shared deployment.
+
 ## Daily work
 
 ### Subscribers and services

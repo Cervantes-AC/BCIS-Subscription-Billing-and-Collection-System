@@ -67,7 +67,7 @@ pnpm db:migrate
 pnpm db:seed
 ```
 
-The seed creates initial roles, plans, and login accounts. In this development seed, the usernames are `admin`, `cashier`, `collector_supervisor`, `accounting`, `technician`, and `viewer`; their initial password is `admin123`. Change these passwords before anyone else accesses the system. The demo data seed is separate and should only be used in a disposable database:
+The seed creates initial roles, plans, and login accounts. In this development seed, the usernames are `admin`, `cashier`, `collector_supervisor`, `accounting`, `technician`, and `viewer`; their initial password is `admin123`. Change these passwords before anyone else accesses the system. The demo data seed also creates `demo_collector_01`, `demo_collector_02`, and `demo_collector_03` with the least-privilege field-collector role; their initial password is `admin123`. Run the demo seed only in a disposable database:
 
 ```powershell
 pnpm --filter @bcis/db run seed:demo
@@ -116,7 +116,7 @@ pnpm build:desktop
 ## Tests
 
 ```powershell
-pnpm test                 # API service unit tests
+pnpm test                 # API and database seed unit tests
 pnpm test:integration     # opt-in acceptance integration checks
 pnpm test:e2e             # Electron desktop smoke test
 ```
@@ -136,7 +136,7 @@ The documented acceptance scenarios are AT-01 through AT-12. Some require manual
 | `pnpm db:studio` | Open Drizzle Studio for database inspection |
 | `pnpm build` | Build all packages |
 | `pnpm lint` | Run ESLint across workspace packages |
-| `pnpm test` | Run API unit tests |
+| `pnpm test` | Run API and database seed unit tests |
 | `pnpm test:integration` | Run opt-in API acceptance integration tests |
 | `pnpm test:e2e` | Run the desktop Playwright smoke test |
 

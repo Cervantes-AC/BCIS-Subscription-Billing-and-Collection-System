@@ -35,6 +35,7 @@
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seeds/run.ts",
     "seed:demo": "tsx src/seeds/demo-data.ts",
+    "test:unit": "vitest run src/seeds/demo-collectors.test.ts",
     "lint": "eslint src --ext .ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

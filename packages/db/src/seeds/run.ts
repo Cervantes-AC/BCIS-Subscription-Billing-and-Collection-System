@@ -86,6 +86,7 @@ async function seedDatabase() {
         { name: 'admin', description: 'Administrator - Operational management', isSystem: true },
         { name: 'cashier', description: 'Cashier - Payment processing', isSystem: true },
         { name: 'collection_supervisor', description: 'Collection Supervisor - Field collection management', isSystem: true },
+        { name: 'field_collector', description: 'Field Collector - Record assigned route collections', isSystem: true },
         { name: 'accounting', description: 'Accounting/Auditor - Financial reporting', isSystem: true },
         { name: 'technician', description: 'Technician - Service operations', isSystem: true },
         { name: 'viewer', description: 'Read-only Viewer - Reports only', isSystem: true },
@@ -127,6 +128,10 @@ async function seedDatabase() {
           'collection.view', 'collection.create', 'collection.record', 'collection.remit', 'collection.reconcile',
           'receivables.view',
           'report.view',
+        ],
+        field_collector: [
+          'subscriber.view',
+          'collection.view', 'collection.record',
         ],
         accounting: [
           'subscriber.view',
