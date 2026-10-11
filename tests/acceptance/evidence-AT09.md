@@ -7,3 +7,9 @@
 - Test: `packages/api/src/services/__tests__/acceptance.integration.test.ts`
 
 This service-level database test verifies concurrent posting and cleanup. It does not replace a separate-PC desktop session test.
+
+## Repeat run: 2026-10-11
+
+- Target: `bcis_acceptance_test_20261011`, a newly created disposable PostgreSQL database with synthetic seed data
+- Result: PASS. The opt-in integration test passed; two concurrent payments posted, the third was rejected, and reversal cleanup restored the invoice balance.
+- Verification command: `pnpm test:integration` with `BCIS_ACCEPTANCE_DB=1`

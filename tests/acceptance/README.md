@@ -35,7 +35,7 @@ To verify a real backup/restore cycle, set `BCIS_DISPOSABLE_DATABASE_URL` to tha
 ./tests/acceptance/restore-check.ps1
 ```
 
-The script refuses source database names without `test`, `acceptance`, or `disposable`, writes comparison evidence, and retains the dump and restored database for inspection. See [AT-09 evidence](evidence-AT09.md), [latest AT-12 restore evidence](evidence-restore-20261011_132344.md), and the [three-PC checklist](lan-validation.md).
+The script refuses source database names without `test`, `acceptance`, or `disposable`, writes comparison evidence, and retains the dump and restored database for inspection. See [AT-09 evidence](evidence-AT09.md), [latest AT-12 restore evidence](evidence-restore-20261011_150052.md), and the [three-PC checklist](lan-validation.md).
 
 ## Desktop end-to-end check
 
