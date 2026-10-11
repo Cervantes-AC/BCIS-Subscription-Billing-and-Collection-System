@@ -55,63 +55,51 @@ export function App() {
       <TopBar
         user={user}
         sidebarCollapsed={sidebarCollapsed}
+        className={sidebarCollapsed ? 'sidebar-collapsed' : ''}
         onToggleSidebar={(sidebar: boolean) => useStore.getState().setSidebarCollapsed(sidebar)}
-          onLogout={() => {
-            void api.logout().catch(() => undefined).finally(() => {
-              clearUser();
-              queryClient.clear();
-              navigate('/login', { replace: true });
-            });
-          }}
+        onLogout={() => {
+          void api.logout().catch(() => undefined).finally(() => {
+            clearUser();
+            queryClient.clear();
+            navigate('/login', { replace: true });
+          });
+        }}
       />
-      <div className="flex min-h-screen">
-        {/* Sidebar */}
-        <Sidebar
-          collapsed={sidebarCollapsed}
-          onToggle={sidebar => useStore.getState().setSidebarCollapsed(sidebar)}
-        />
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggle={sidebar => useStore.getState().setSidebarCollapsed(sidebar)}
+      />
 
-        {/* Main Content */}
-        <div className="flex-1 overflow-auto">
-          {/* Route wrapper with KPI cards on dashboard */}
-          <Routes>
-            <Route path="/login" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/" element={
+      <main className={`app-main ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+        <Routes>
+          <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+          <Route
+            path="/"
+            element={
               <div className="content-area">
                 <KPICards />
                 <DashboardPage />
               </div>
-            } />
-            <Route path="/dashboard" element={
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
               <div className="content-area">
                 <KPICards />
                 <DashboardPage />
               </div>
-            } />
-            <Route path="/subscribers" element={
-              <SubscribersPage />
-            } />
-            <Route path="/billing" element={
-              <BillingPage />
-            } />
-            <Route path="/payments" element={
-              <PaymentsPage />
-            } />
-            <Route path="/collections" element={
-              <CollectionsPage />
-            } />
-            <Route path="/receivables" element={
-              <ReceivablesPage />
-            } />
-            <Route path="/reports" element={
-              <ReportsPage />
-            } />
-            <Route path="/admin" element={
-              <AdminPage />
-            } />
-          </Routes>
-        </div>
-      </div>
+            }
+          />
+          <Route path="/subscribers" element={<SubscribersPage />} />
+          <Route path="/billing" element={<BillingPage />} />
+          <Route path="/payments" element={<PaymentsPage />} />
+          <Route path="/collections" element={<CollectionsPage />} />
+          <Route path="/receivables" element={<ReceivablesPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+        </Routes>
+      </main>
     </div>
   );
 }

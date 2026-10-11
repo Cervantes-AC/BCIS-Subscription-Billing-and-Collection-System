@@ -2,11 +2,11 @@ import React from 'react';
 import { useStore } from '../stores/useStore';
 import { useAuthStore } from '../stores/useAuthStore';
 
-export function TopBar({ user, sidebarCollapsed, onToggleSidebar, onLogout }: any) {
+export function TopBar({ user, sidebarCollapsed, onToggleSidebar, onLogout, className = '' }: any) {
   const setSidebarCollapsed = useStore.getState().setSidebarCollapsed;
 
   return (
-    <header className="topbar bg-surface border-b border-border px-4 flex items-center justify-between">
+    <header className={`topbar bg-surface border-b border-border px-4 flex items-center justify-between ${className}`}>
       <div className="flex items-center gap-4">
         <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
           <span className="text-white font-bold">BCIS</span>

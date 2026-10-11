@@ -105,9 +105,9 @@ export function ReceivablesPage() {
 
   return (
     <section className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h2 className="page-title">Receivables</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setActiveTab('aging')}
             className={`px-4 py-2 rounded-lg transition-colors ${activeTab === 'aging' ? 'bg-primary text-white' : 'bg-surface hover:bg-gray-100'}`}
@@ -296,7 +296,7 @@ function ARAgingView({ data, isLoading, error }: any) {
       <div className="bg-surface rounded-lg overflow-hidden">
         <div className="p-4 border-b border-gray-200 font-semibold">Account Details</div>
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[1100px]">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">Account #</th>
@@ -314,7 +314,7 @@ function ARAgingView({ data, isLoading, error }: any) {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {details?.map((acc: OverdueAccount) => (
-                <tr key={acc.subscriber.id} className="hover:bg-gray-50">
+                <tr key={acc.serviceAccount.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-mono text-sm">{acc.subscriber.accountNumber}</td>
                   <td className="px-4 py-3">
                     <p className="font-medium">{acc.subscriber.firstName} {acc.subscriber.lastName}</p>
@@ -351,7 +351,7 @@ function OverdueAccountsView({ data, onSelect, onSuspend, isLoading, error }: an
   return (
     <div className="bg-surface rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full min-w-[1000px]">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">Account #</th>
@@ -367,7 +367,7 @@ function OverdueAccountsView({ data, onSelect, onSuspend, isLoading, error }: an
           </thead>
           <tbody className="divide-y divide-gray-200">
             {data?.items?.map((acc: OverdueAccount) => (
-              <tr key={acc.subscriber.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => onSelect(acc)}>
+              <tr key={acc.serviceAccount.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => onSelect(acc)}>
                 <td className="px-4 py-3 font-mono text-sm">{acc.subscriber.accountNumber}</td>
                 <td className="px-4 py-3">
                   <p className="font-medium">{acc.subscriber.firstName} {acc.subscriber.lastName}</p>
@@ -428,7 +428,7 @@ function SuspensionCandidatesView({ data, onSuspend, isLoading, error }: any) {
         </span>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full min-w-[900px]">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">Account #</th>
@@ -443,7 +443,7 @@ function SuspensionCandidatesView({ data, onSuspend, isLoading, error }: any) {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {data?.items?.map((acc: OverdueAccount) => (
-              <tr key={acc.subscriber.id} className="hover:bg-gray-50">
+              <tr key={acc.serviceAccount.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-mono text-sm">{acc.subscriber.accountNumber}</td>
                 <td className="px-4 py-3">
                   <p className="font-medium">{acc.subscriber.firstName} {acc.subscriber.lastName}</p>

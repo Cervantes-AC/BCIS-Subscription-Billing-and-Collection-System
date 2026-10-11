@@ -50,19 +50,22 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       className={`sidebar flex flex-col h-screen border-r border-border ${sidebarCollapsed ? 'collapsed' : ''}`}
     >
       {/* Sidebar header */}
-      <div className="p-4 border-b border-border">
+      <div className={`p-4 border-b border-border ${sidebarCollapsed ? 'text-center' : ''}`}>
         <h2 className="text-xs font-medium text-text-secondary uppercase tracking-wider">
-          Navigation
+          <span className={sidebarCollapsed ? 'sr-only' : ''}>
+            Navigation
+          </span>
+          {sidebarCollapsed && <span aria-hidden="true">BC</span>}
         </h2>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-2 pt-2">
+      <nav className="min-h-0 flex-1 overflow-y-auto px-2 pt-2">
         <ul className="space-y-1">
           {visibleItems.map((item) => (
             <li key={item.key}>
               <button
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${sidebarCollapsed ? '' : 'flex-1'} ${sidebarCollapsed ? 'justify-center items-center' : ''}`}
+                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${sidebarCollapsed ? 'justify-center' : ''}`}
                 onClick={() => {
                   // Navigate to route
                   const routes: Record<string, string> = {
@@ -79,8 +82,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 }}
                 aria-label={item.label}
               >
-                <span className="hidden sm:block">{item.label}</span>
                 {item.icon}
+                <span className={sidebarCollapsed ? 'sr-only' : 'truncate'}>{item.label}</span>
               </button>
             </li>
           ))}

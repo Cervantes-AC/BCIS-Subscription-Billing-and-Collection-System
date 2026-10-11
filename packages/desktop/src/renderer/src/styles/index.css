@@ -260,6 +260,18 @@
     @apply min-h-screen bg-canvas;
   }
 
+  .app-main {
+    @apply min-h-screen min-w-0 pt-14;
+    margin-left: 16rem;
+    width: calc(100% - 16rem);
+    transition: margin-left 200ms ease, width 200ms ease;
+  }
+
+  .app-main.sidebar-collapsed {
+    margin-left: 4rem;
+    width: calc(100% - 4rem);
+  }
+
   .page-header {
     @apply bg-surface border-b border-border px-6 py-4;
   }
