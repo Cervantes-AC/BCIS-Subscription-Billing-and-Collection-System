@@ -4,8 +4,8 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
-  Search, Plus, User, Phone, Mail, MapPin, 
-  Edit, Eye, Trash2, Loader2, AlertCircle,
+  Search, Plus, User, Phone, Mail, MapPin,
+  Edit, Eye, Loader2, AlertCircle,
   CreditCard, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { formatCurrency } from '@bcis/shared';
@@ -36,7 +36,7 @@ export function SubscribersPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'list' | 'detail'>('list');
 
-  const { data: subscribersData, isLoading } = useQuery({
+  const { data: subscribersData, isLoading, error: subscribersError } = useQuery({
     queryKey: ['subscribers', 'list', searchQuery],
     queryFn: () => api.listSubscribers({ query: searchQuery, page: 1, limit: 50 }),
   });
@@ -83,11 +83,12 @@ export function SubscribersPage() {
   };
 
   const handleCreate = async (data: any) => {
-    await createMutation.mutateAsync(data);
+    const payload = prepareSubscriberPayload(data);
+    await createMutation.mutateAsync(payload);
   };
 
   const handleUpdate = async (id: string, data: any) => {
-    await updateMutation.mutateAsync({ id, data });
+    await updateMutation.mutateAsync({ id, data: prepareSubscriberPayload(data) });
   };
 
   if (activeTab === 'detail' && selectedSubscriber) {
@@ -133,6 +134,7 @@ export function SubscribersPage() {
 
       {/* Subscriber List */}
       <div className="bg-surface rounded-lg overflow-hidden">
+        {subscribersError && <p role="alert" className="m-4 rounded bg-red-50 p-3 text-sm text-red-700">Could not load subscribers: {(subscribersError as Error).message}</p>}
         {isLoading ? (
           <div className="p-8 text-center">
             <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary mb-2" />
@@ -199,10 +201,10 @@ export function SubscribersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <button className="p-1 hover:bg-gray-100 rounded" title="View">
+                        <button type="button" onClick={(event) => { event.stopPropagation(); handleSelect(subscriber); }} className="p-1 hover:bg-gray-100 rounded" title="View" aria-label={`View ${subscriber.firstName} ${subscriber.lastName}`}>
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button className="p-1 hover:bg-gray-100 rounded" title="Edit">
+                        <button type="button" onClick={(event) => { event.stopPropagation(); setSelectedSubscriber(subscriber); setShowEditModal(true); }} className="p-1 hover:bg-gray-100 rounded" title="Edit" aria-label={`Edit ${subscriber.firstName} ${subscriber.lastName}`}>
                           <Edit className="w-4 h-4" />
                         </button>
                       </div>
@@ -235,6 +237,7 @@ export function SubscribersPage() {
           onClose={() => setShowCreateModal(false)}
           onSubmit={handleCreate}
           isSubmitting={createMutation.isPending}
+          error={createMutation.error}
           areas={areas?.items || []}
           collectors={collectors?.items || []}
         />
@@ -248,6 +251,7 @@ export function SubscribersPage() {
           onClose={() => { setShowEditModal(false); setSelectedSubscriber(null); }}
           onSubmit={(data: any) => handleUpdate(selectedSubscriber.id, data)}
           isSubmitting={updateMutation.isPending}
+          error={updateMutation.error}
           areas={areas?.items || []}
           collectors={collectors?.items || []}
         />
@@ -466,7 +470,17 @@ function PaymentsView({ payments }: any) {
   );
 }
 
-function SubscriberFormModal({ title, initialData, onClose, onSubmit, isSubmitting, areas, collectors }: any) {
+function prepareSubscriberPayload(data: any) {
+  return {
+    ...data,
+    email: data.email?.trim() || undefined,
+    collectionAreaId: data.collectionAreaId || undefined,
+    collectorId: data.collectorId || undefined,
+    addresses: data.addresses,
+  };
+}
+
+function SubscriberFormModal({ title, initialData, onClose, onSubmit, isSubmitting, error, areas, collectors }: any) {
   const [formData, setFormData] = useState({
     firstName: initialData?.firstName || '',
     middleName: initialData?.middleName || '',
@@ -501,6 +515,7 @@ function SubscriberFormModal({ title, initialData, onClose, onSubmit, isSubmitti
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {error && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-700">Could not save subscriber: {error.message}</p>}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium mb-2">First Name <span className="text-red-500">*</span></label>

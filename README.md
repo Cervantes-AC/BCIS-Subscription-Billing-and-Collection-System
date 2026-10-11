@@ -129,6 +129,26 @@ The documented acceptance scenarios are AT-01 through AT-12. Some require manual
 
 Use this section as a guide for explaining the system. Match claims about testing to the latest acceptance evidence and test output; a successful build does not by itself prove every workflow.
 
+### Required live demo sequence
+
+Use a seeded demo environment with synthetic subscriber data. Before the defense, confirm that the required accounts, service plans, invoices, payment methods, printer or receipt preview, and report exports are available. Demonstrate each workflow only after verifying it in that environment.
+
+1. Log in with an administrator account and show the dashboard.
+2. Create a synthetic subscriber or open one with an Internet or Cable service account.
+3. Generate or display that month's invoice and show the corresponding ledger debit.
+4. Post an exact or partial Cash payment, then print or preview its receipt.
+5. Post or verify a GCash payment with proof, and show that a duplicate reference is rejected.
+6. Show the subscriber ledger and Statement of Account.
+7. Open an overdue subscriber and demonstrate AR aging and filtering.
+8. Create or open a collector batch, record collections, remit Cash, and reconcile any difference.
+9. Reverse a payment and show the resulting audit trail.
+10. Export at least one management report to PDF or XLSX.
+11. Sign in with a lower-privileged account and demonstrate role restrictions.
+12. Create a backup and explain the restore procedure, including the result of a restore test.
+13. If the laboratory network is available, demonstrate simultaneous use from multiple office clients.
+
+Record which steps were completed and any environment-specific limitations in the acceptance evidence. Do not present an untested workflow as validated; the test coverage and LAN checklist are described above.
+
 ### Architecture and major modules
 
 BCIS uses a three-layer architecture. The Electron desktop application presents a React interface. It sends HTTP requests to the Fastify API under `/api/v1`. The API validates requests, applies business rules, and reads or writes PostgreSQL through Drizzle ORM. The desktop application does not connect directly to the database.

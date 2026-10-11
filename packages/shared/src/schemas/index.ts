@@ -101,12 +101,14 @@ export const SubscriberAddressSchema = z.object({
 });
 
 export const CreateSubscriberRequestSchema = z.object({
-  accountNumber: z.string().min(1).max(50).regex(/^[A-Z0-9-]+$/),
+  // The API generates account numbers when a subscriber is created.
+  accountNumber: z.string().min(1).max(50).regex(/^[A-Z0-9-]+$/).optional(),
   firstName: z.string().min(1).max(100),
   middleName: z.string().max(100).optional(),
   lastName: z.string().min(1).max(100),
   contactNumber: z.string().regex(/^(\+63|0)[0-9]{10}$/),
   email: z.string().email().optional().or(z.literal('')),
+  status: z.enum(['active', 'inactive', 'terminated', 'archived']).optional(),
   billingDay: z.number().int().min(1).max(28).default(1),
   collectionAreaId: UUIDSchema.optional(),
   collectorId: UUIDSchema.optional(),
