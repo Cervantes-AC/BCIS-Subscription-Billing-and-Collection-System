@@ -3,8 +3,7 @@
  */
 
 import React from 'react';
-import { useEffect } from 'react';
-import { Route, Routes, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useStore } from './stores/useStore';
 import api from './lib/api';
@@ -31,12 +30,6 @@ export function App() {
   const { user, isLoading, setUser, clearUser, hasPermission } = useAuthStore();
   const { sidebarCollapsed } = useStore();
 
-  useEffect(() => {
-    if (!isLoading && !user) {
-      navigate('/login');
-    }
-  }, [isLoading, user, navigate]);
-
   // Check permissions hook
   usePermission(hasPermission);
 
@@ -49,7 +42,12 @@ export function App() {
   }
 
   if (!user) {
-    return <LoginPage />;
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
   }
 
   return (
@@ -77,6 +75,7 @@ export function App() {
         <div className="flex-1 overflow-auto">
           {/* Route wrapper with KPI cards on dashboard */}
           <Routes>
+            <Route path="/login" element={<Navigate to="/dashboard" replace />} />
             <Route path="/" element={
               <div className="content-area">
                 <KPICards />

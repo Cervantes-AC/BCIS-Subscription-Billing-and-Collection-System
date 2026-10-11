@@ -67,7 +67,7 @@ export function ReceivablesPage() {
   const [selectedAccount, setSelectedAccount] = useState<OverdueAccount | null>(null);
   const [showSuspendModal, setShowSuspendModal] = useState(false);
 
-  const { data: agingData } = useQuery({
+  const { data: agingResponse, isLoading: agingLoading, error: agingError } = useQuery({
     queryKey: ['receivables', 'aging', filters],
     queryFn: () => api.getAgingReport({
       asOfDate: new Date().toISOString(),
@@ -78,12 +78,12 @@ export function ReceivablesPage() {
     }),
   });
 
-  const { data: overdueData } = useQuery({
+  const { data: overdueResponse, isLoading: overdueLoading, error: overdueError } = useQuery({
     queryKey: ['receivables', 'overdue', filters],
     queryFn: () => api.getOverdueAccounts({ ...filters, page: 1, limit: 100 }),
   });
 
-  const { data: suspensionData } = useQuery({
+  const { data: suspensionResponse, isLoading: suspensionLoading, error: suspensionError } = useQuery({
     queryKey: ['receivables', 'suspension'],
     queryFn: () => api.getSuspensionCandidates({ page: 1, limit: 100 }),
   });
@@ -102,15 +102,6 @@ export function ReceivablesPage() {
       queryClient.invalidateQueries({ queryKey: ['receivables'] });
     },
   });
-
-  const getAgingBucketTotal = (bucket: string) => {
-    const details = (agingData as any)?.details as OverdueAccount[] | undefined;
-    if (!details) return 0;
-    return details.reduce((sum: number, acc: OverdueAccount) => {
-      const b = acc.agingBuckets.find((x: any) => x.bucket === bucket);
-      return sum + (b?.amount || 0);
-    }, 0);
-  };
 
   return (
     <section className="p-6">
@@ -187,12 +178,14 @@ export function ReceivablesPage() {
       </div>
 
       {activeTab === 'aging' && (
-        <ARAgingView data={agingData} />
+        <ARAgingView data={agingResponse?.data} isLoading={agingLoading} error={agingError} />
       )}
 
       {activeTab === 'overdue' && (
         <OverdueAccountsView 
-          data={overdueData} 
+          data={overdueResponse?.data}
+          isLoading={overdueLoading}
+          error={overdueError}
           onSelect={setSelectedAccount}
           onSuspend={(account: OverdueAccount) => { setSelectedAccount(account); setShowSuspendModal(true); }}
         />
@@ -200,7 +193,9 @@ export function ReceivablesPage() {
 
       {activeTab === 'suspension' && (
         <SuspensionCandidatesView 
-          data={suspensionData}
+          data={suspensionResponse?.data}
+          isLoading={suspensionLoading}
+          error={suspensionError}
           onSuspend={(account: OverdueAccount) => { setSelectedAccount(account); setShowSuspendModal(true); }}
         />
       )}
@@ -222,8 +217,10 @@ function formatAgingLabel(bucket: string) {
   return labels[bucket] || bucket;
 }
 
-function ARAgingView({ data }: any) {
-  if (!data) return <div className="text-center p-8">Loading...</div>;
+function ARAgingView({ data, isLoading, error }: any) {
+  if (isLoading) return <div className="text-center p-8">Loading receivables...</div>;
+  if (error) return <div role="alert" className="text-center p-8 text-red-700">Could not load receivables: {error.message}</div>;
+  if (!data?.summary) return <div role="alert" className="text-center p-8 text-red-700">Receivables data is unavailable.</div>;
 
   const { summary, details } = data;
   const buckets = ['current', '1-30', '31-60', '61-90', '90+'];
@@ -346,8 +343,10 @@ function ARAgingView({ data }: any) {
   );
 }
 
-function OverdueAccountsView({ data, onSelect, onSuspend }: any) {
-  if (!data) return <div className="text-center p-8">Loading...</div>;
+function OverdueAccountsView({ data, onSelect, onSuspend, isLoading, error }: any) {
+  if (isLoading) return <div className="text-center p-8">Loading overdue accounts...</div>;
+  if (error) return <div role="alert" className="text-center p-8 text-red-700">Could not load overdue accounts: {error.message}</div>;
+  if (!data) return <div className="text-center p-8">No overdue account data is available.</div>;
 
   return (
     <div className="bg-surface rounded-lg overflow-hidden">
@@ -415,8 +414,10 @@ function OverdueAccountsView({ data, onSelect, onSuspend }: any) {
   );
 }
 
-function SuspensionCandidatesView({ data, onSuspend }: any) {
-  if (!data) return <div className="text-center p-8">Loading...</div>;
+function SuspensionCandidatesView({ data, onSuspend, isLoading, error }: any) {
+  if (isLoading) return <div className="text-center p-8">Loading suspension candidates...</div>;
+  if (error) return <div role="alert" className="text-center p-8 text-red-700">Could not load suspension candidates: {error.message}</div>;
+  if (!data) return <div className="text-center p-8">No suspension candidate data is available.</div>;
 
   return (
     <div className="bg-surface rounded-lg overflow-hidden">
