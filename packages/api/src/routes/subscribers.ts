@@ -254,6 +254,8 @@ export async function subscriberRoutes(fastify: FastifyInstance) {
         subscribers: results.map(s => ({
           id: s.id,
           accountNumber: s.accountNumber,
+          firstName: s.firstName,
+          lastName: s.lastName,
           name: `${s.firstName} ${s.lastName}`,
           contactNumber: s.contactNumber,
           status: s.status,

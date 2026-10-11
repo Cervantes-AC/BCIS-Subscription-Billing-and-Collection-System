@@ -89,7 +89,9 @@ class ApiClient {
     const data = await response.json().catch(() => ({})) as ApiResponse<T>;
 
     if (!response.ok) {
-      throw new Error(data.error?.message || `Request failed with status ${response.status}`);
+      const message = data.error?.message || `Request failed with status ${response.status}`;
+      const details = data.error?.details ? ` (${JSON.stringify(data.error.details)})` : '';
+      throw new Error(`${fetchOptions.method || 'GET'} ${new URL(url).pathname}: ${message}${details}`);
     }
 
     return data;
@@ -229,7 +231,7 @@ class ApiClient {
 
   // Subscribers
   async searchSubscribers(params: { q: string; limit?: number }) {
-    return this.request('/subscribers/search', { params });
+    return this.request('/search', { params });
   }
 
   async listSubscribers(params: any) {
@@ -447,7 +449,9 @@ class ApiClient {
     const contentType = response.headers.get('content-type') || '';
     if (!response.ok || contentType.includes('application/json')) {
       const payload = await response.json().catch(() => null);
-      throw new Error(payload?.error?.message || payload?.message || `Download failed with status ${response.status}`);
+      const message = payload?.error?.message || payload?.message || `Download failed with status ${response.status}`;
+      const details = payload?.error?.details ? ` (${JSON.stringify(payload.error.details)})` : '';
+      throw new Error(`GET ${new URL(url).pathname}: ${message}${details}`);
     }
     return response.arrayBuffer();
   }
