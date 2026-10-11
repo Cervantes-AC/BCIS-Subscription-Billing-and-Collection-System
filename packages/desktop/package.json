@@ -10,7 +10,7 @@
     "preview": "electron-vite preview",
     "start": "electron .",
     "lint": "eslint src --ext .ts,.tsx",
-    "test": "vitest run",
+    "test": "playwright test --config=playwright.config.ts",
     "test:e2e": "playwright test --config=playwright.config.ts",
     "typecheck": "tsc --noEmit"
   },

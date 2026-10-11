@@ -86,32 +86,32 @@ export function AdminPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch data
-  const { data: usersData, isLoading: usersLoading, refetch: refetchUsers } = useQuery({
+  const { data: usersData, isLoading: usersLoading, error: usersError } = useQuery({
     queryKey: ['admin', 'users', searchQuery],
-    queryFn: () => api.listUsers({ query: searchQuery, limit: 100 }),
+    queryFn: () => api.listUsers({ search: searchQuery, limit: 100 }),
   });
 
-  const { data: rolesData, isLoading: rolesLoading } = useQuery({
+  const { data: rolesData, isLoading: rolesLoading, error: rolesError } = useQuery({
     queryKey: ['admin', 'roles'],
     queryFn: () => api.get('/admin/roles'),
   });
 
-  const { data: permissionsData, isLoading: permissionsLoading } = useQuery({
+  const { data: permissionsData, isLoading: permissionsLoading, error: permissionsError } = useQuery({
     queryKey: ['admin', 'permissions'],
     queryFn: () => api.get('/admin/permissions'),
   });
 
-  const { data: settingsData, isLoading: settingsLoading } = useQuery({
+  const { data: settingsData, isLoading: settingsLoading, error: settingsError } = useQuery({
     queryKey: ['admin', 'settings'],
     queryFn: () => api.get('/admin/settings', { publicOnly: false }),
   });
 
-  const { data: auditData, isLoading: auditLoading, refetch: refetchAudit } = useQuery({
+  const { data: auditData, isLoading: auditLoading, refetch: refetchAudit, error: auditError } = useQuery({
     queryKey: ['admin', 'audit', searchQuery],
     queryFn: () => api.get('/admin/audit-logs', { limit: 100, query: searchQuery }),
   });
 
-  const { data: backupData, isLoading: backupLoading, refetch: refetchBackup } = useQuery({
+  const { data: backupData, isLoading: backupLoading, refetch: refetchBackup, error: backupError } = useQuery({
     queryKey: ['admin', 'backups'],
     queryFn: () => api.get('/admin/backups', { limit: 50 }),
   });
@@ -161,6 +161,12 @@ export function AdminPage() {
     mutationFn: (id: string) => api.post(`/admin/backups/${id}/restore`, { confirm: true }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] }); alert('Database restored successfully. Please refresh the application.'); },
   });
+
+  const activeError = activeTab === 'users' ? (usersError || createUserMutation.error || updateUserMutation.error || resetPasswordMutation.error || deleteUserMutation.error)
+    : activeTab === 'roles' ? (rolesError || permissionsError || createRoleMutation.error || updateRoleMutation.error)
+    : activeTab === 'settings' ? (settingsError || updateSettingMutation.error)
+    : activeTab === 'backup' ? (backupError || createBackupMutation.error || restoreBackupMutation.error)
+    : auditError;
 
   // State for modals
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
@@ -229,6 +235,7 @@ export function AdminPage() {
         </div>
 
         <div className="p-6">
+          {activeError && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">Administration request failed: {(activeError as Error).message}</div>}
           {/* Users Tab */}
           {activeTab === 'users' && (
             <UsersTab
@@ -340,18 +347,27 @@ function UsersTab({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedUser) {
-      await updateMutation.mutateAsync({ id: selectedUser.id, data: formData });
-    } else {
-      await createMutation.mutateAsync(formData);
+    try {
+      if (selectedUser) {
+        const { email, fullName, roleId, status } = formData;
+        await updateMutation.mutateAsync({ id: selectedUser.id, data: { email, fullName, roleId, status } });
+      } else {
+        await createMutation.mutateAsync(formData);
+      }
+      setFormData({ username: '', email: '', password: '', fullName: '', roleId: '', status: 'active' });
+    } catch {
+      // The administration error banner displays the API failure.
     }
-    setFormData({ username: '', email: '', password: '', fullName: '', roleId: '', status: 'active' });
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    await resetPasswordMutation.mutateAsync({ id: selectedUser!.id, newPassword: formData.password });
-    setFormData({ username: '', email: '', password: '', fullName: '', roleId: '', status: 'active' });
+    try {
+      await resetPasswordMutation.mutateAsync({ id: selectedUser!.id, newPassword: formData.password });
+      setFormData({ username: '', email: '', password: '', fullName: '', roleId: '', status: 'active' });
+    } catch {
+      // The administration error banner displays the API failure.
+    }
   };
 
   const handleUserSelect = (user: User) => {
@@ -439,7 +455,7 @@ function UsersTab({
           <div className="bg-surface rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-surface z-10">
               <h3 className="text-lg font-semibold">{showCreateModal ? 'Create User' : 'Edit User'}</h3>
-              <button onClick={onCloseCreate} className="p-2 hover:bg-gray-100 rounded-lg">âœ•</button>
+              <button type="button" onClick={showEditModal ? onCloseEdit : onCloseCreate} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Close">×</button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
@@ -455,8 +471,10 @@ function UsersTab({
                 <input type="text" value={formData.fullName} onChange={(e) => setFormData({...formData, fullName: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">{showCreateModal ? 'Password' : 'New Password (leave blank to keep current)'} <span className="text-red-500">{showCreateModal ? '*' : ''}</span></label>
-                <input type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required={showCreateModal} />
+                {showCreateModal && <>
+                  <label className="block text-sm font-medium mb-2">Password <span className="text-red-500">*</span></label>
+                  <input type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required minLength={8} />
+                </>}
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Role <span className="text-red-500">*</span></label>
@@ -473,7 +491,7 @@ function UsersTab({
                 </select>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <button type="button" onClick={onCloseCreate} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                <button type="button" onClick={showEditModal ? onCloseEdit : onCloseCreate} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
                 <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2">
                   {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="w-4 h-4 animate-spin" />}
                   {showCreateModal ? 'Create' : 'Update'} User
@@ -517,12 +535,16 @@ function RolesTab({ roles, permissions, isLoading, onCreate, onEdit, createMutat
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedRole) {
-      await updateMutation.mutateAsync({ id: selectedRole.id, data: formData });
-    } else {
-      await createMutation.mutateAsync(formData);
+    try {
+      if (selectedRole) {
+        await updateMutation.mutateAsync({ id: selectedRole.id, data: formData });
+      } else {
+        await createMutation.mutateAsync(formData);
+      }
+      setFormData({ name: '', description: '', permissionIds: [] });
+    } catch {
+      // The administration error banner displays the API failure.
     }
-    setFormData({ name: '', description: '', permissionIds: [] });
   };
 
   const handleRoleSelect = (role: Role) => {
@@ -580,7 +602,7 @@ function RolesTab({ roles, permissions, isLoading, onCreate, onEdit, createMutat
                 <div className="space-y-1">
                   {perms.map((perm: Permission) => (
                     <label key={perm.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input type="checkbox" checked={formData.permissionIds.includes(perm.id)} onChange={(e) => setFormData({...formData, permissionIds: e.target.checked ? [...formData.permissionIds, perm.id] : formData.permissionIds.filter(id => id !== perm.id)})} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" />
+                      <input type="checkbox" checked={formData.permissionIds.includes(perm.id)} onChange={(e) => setFormData({...formData, permissionIds: e.target.checked ? [...formData.permissionIds, perm.id] : formData.permissionIds.filter(id => id !== perm.id)})} disabled={selectedRole?.isSystem} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary disabled:opacity-50" />
                       <span title={perm.code}>{perm.name}</span>
                     </label>
                   ))}
@@ -597,9 +619,10 @@ function RolesTab({ roles, permissions, isLoading, onCreate, onEdit, createMutat
           <div className="bg-surface rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-surface z-10">
               <h3 className="text-lg font-semibold">{showCreateModal ? 'Create Role' : 'Edit Role'}</h3>
-              <button onClick={onCloseCreate} className="p-2 hover:bg-gray-100 rounded-lg">âœ•</button>
+              <button type="button" onClick={showEditModal ? onCloseEdit : onCloseCreate} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Close">×</button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {showEditModal && selectedRole?.isSystem && <p className="rounded bg-blue-50 p-3 text-sm text-blue-800">System roles are read-only.</p>}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Role Name <span className="text-red-500">*</span></label>
@@ -619,7 +642,7 @@ function RolesTab({ roles, permissions, isLoading, onCreate, onEdit, createMutat
                       <h5 className="text-xs font-medium text-text-primary uppercase tracking-wide mb-2">{module.replace('_', ' ')}</h5>
                       {perms.map((perm: Permission) => (
                         <label key={perm.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                          <input type="checkbox" checked={formData.permissionIds.includes(perm.id)} onChange={(e) => setFormData({...formData, permissionIds: e.target.checked ? [...formData.permissionIds, perm.id] : formData.permissionIds.filter(id => id !== perm.id)})} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" />
+                          <input type="checkbox" checked={formData.permissionIds.includes(perm.id)} onChange={(e) => setFormData({...formData, permissionIds: e.target.checked ? [...formData.permissionIds, perm.id] : formData.permissionIds.filter(id => id !== perm.id)})} disabled={showEditModal && selectedRole?.isSystem} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary disabled:opacity-50" />
                           <span title={perm.code}>{perm.name}</span>
                         </label>
                       ))}
@@ -629,8 +652,8 @@ function RolesTab({ roles, permissions, isLoading, onCreate, onEdit, createMutat
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <button type="button" onClick={onCloseCreate} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-                <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2">
+                <button type="button" onClick={showEditModal ? onCloseEdit : onCloseCreate} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                <button type="submit" disabled={createMutation.isPending || updateMutation.isPending || (showEditModal && selectedRole?.isSystem)} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2">
                   {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="w-4 h-4 animate-spin" />}
                   {showCreateModal ? 'Create' : 'Update'} Role
                 </button>
@@ -687,7 +710,7 @@ function SettingsTab({ settings, isLoading, updateMutation }: any) {
                   <div className="flex items-center gap-1">
                     {editKey === setting.id ? (
                       <>
-                        <button onClick={() => { updateMutation.mutate({ key: setting.key, data: { value: editValue, description: setting.description } }); setEditKey(null); }} className="p-1 hover:bg-green-100 text-green-600 rounded" title="Save"><CheckCircle className="w-4 h-4" /></button>
+                        <button type="button" onClick={async () => { try { await updateMutation.mutateAsync({ key: setting.key, data: { value: editValue, description: setting.description } }); setEditKey(null); } catch { /* Keep the editor open and show the page-level error. */ } }} disabled={updateMutation.isPending} className="p-1 hover:bg-green-100 text-green-600 rounded disabled:opacity-50" title="Save"><CheckCircle className="w-4 h-4" /></button>
                         <button onClick={() => { setEditValue(setting.value); setEditKey(null); }} className="p-1 hover:bg-red-100 text-red-600 rounded" title="Cancel"><XCircle className="w-4 h-4" /></button>
                       </>
                     ) : (
@@ -712,8 +735,12 @@ function BackupTab({ backups, isLoading, onCreate, onRestore, createMutation, is
 
   const handleCreateBackup = async (e: React.FormEvent) => {
     e.preventDefault();
-    await createMutation.mutateAsync(backupType);
-    onCloseModal();
+    try {
+      await createMutation.mutateAsync(backupType);
+      onCloseModal();
+    } catch {
+      // Keep the dialog open and show the page-level error.
+    }
   };
 
   return (

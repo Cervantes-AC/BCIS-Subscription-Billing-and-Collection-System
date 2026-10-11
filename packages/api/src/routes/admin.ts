@@ -69,7 +69,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   // Audit logs
   app.get('/audit-logs', {
-    schema: { querystring: PaginationSchema.extend({ actorId: UUIDSchema.optional(), entityType: z.string().optional(), action: z.string().optional(), dateFrom: z.string().datetime().optional(), dateTo: z.string().datetime().optional() }) },
+    schema: { querystring: PaginationSchema.extend({ query: z.string().optional(), actorId: UUIDSchema.optional(), entityType: z.string().optional(), action: z.string().optional(), dateFrom: z.string().datetime().optional(), dateTo: z.string().datetime().optional() }) },
     preHandler: fastify.authorize('admin.audit'),
   }, async (request, reply) => {
     const query = request.query as any;
@@ -81,6 +81,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
     if (query.actorId) conditions.push(eq(auditLogs.actorId, query.actorId));
     if (query.entityType) conditions.push(eq(auditLogs.entityType, query.entityType));
     if (query.action) conditions.push(eq(auditLogs.action, query.action));
+    if (query.query) conditions.push(or(
+      ilike(auditLogs.action, `%${query.query}%`),
+      ilike(auditLogs.entityType, `%${query.query}%`),
+      ilike(auditLogs.entityId, `%${query.query}%`),
+      ilike(auditLogs.reason, `%${query.query}%`),
+    ));
     if (query.dateFrom) conditions.push(gte(auditLogs.createdAt, new Date(query.dateFrom)));
     if (query.dateTo) conditions.push(lte(auditLogs.createdAt, new Date(query.dateTo)));
 
