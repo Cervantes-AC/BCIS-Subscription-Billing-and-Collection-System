@@ -125,6 +125,49 @@ The integration and desktop end-to-end tests require a migrated, synthetically s
 
 The documented acceptance scenarios are AT-01 through AT-12. Some require manual or environment-specific validation; a scenario is only complete when its result has been observed and recorded in the acceptance evidence files.
 
+## System demonstration and defense
+
+Use this section as a guide for explaining the system. Match claims about testing to the latest acceptance evidence and test output; a successful build does not by itself prove every workflow.
+
+### Architecture and major modules
+
+BCIS uses a three-layer architecture. The Electron desktop application presents a React interface. It sends HTTP requests to the Fastify API under `/api/v1`. The API validates requests, applies business rules, and reads or writes PostgreSQL through Drizzle ORM. The desktop application does not connect directly to the database.
+
+- `packages/desktop` contains the Electron main/preload code and React screens for login, subscribers, service accounts, billing, payments, collections, reports, and administration.
+- `packages/api` contains authentication, authorization, route handlers, request validation, and business services.
+- `packages/db` contains the Drizzle schema, migrations, seeds, and database access.
+- `packages/shared` contains types and utilities used by multiple packages, including currency conversion and formatting.
+
+### Database relationships and business rules
+
+A subscriber can have multiple service accounts. Each service account uses a plan and can have invoices for billing cycles. An invoice contains line items and adjustments, and can receive one or more payment allocations. A payment may cover multiple invoices; any unapplied excess is recorded as subscriber credit. Collection batches group accounts assigned for collection and track collected amounts and remittances. The schema definitions are in `packages/db/src/schema`.
+
+Amounts are stored as integer centavos to avoid floating-point currency errors; shared helpers convert between pesos and centavos. Monthly invoice generation uses the service account's current rate when set, otherwise the plan's monthly rate. An installation fee applies only when the activation date falls within the billing cycle. The current generator sets reconnection fee and penalty to zero. It prevents duplicate account invoices for a cycle, with a database uniqueness constraint as a second safeguard.
+
+Payments can be allocated manually or automatically to oldest due balances first. Manual allocations must add up to the payment amount and belong to the same subscriber. Allocation is limited to the invoice's outstanding balance. Excess is credited to the subscriber. Payment and invoice updates run transactionally, with conditional balance updates to guard against concurrent over-allocation. GCash payments remain pending until verified. Reversals preserve the original payment and create a linked reversal record. Collection batches cannot be closed with an unexplained shortage.
+
+### How the desktop and server communicate
+
+The renderer uses the shared API client in `packages/desktop/src/renderer/src/lib/api.ts`. It sends JSON requests to the Fastify routes registered in `packages/api/src/routes/index.ts`; the API returns JSON responses and status codes. The desktop uses the configured API base URL (by default `http://127.0.0.1:3000/api/v1`). For office PCs, the API host must be reachable on the LAN and each desktop must be configured with that host's address; see the deployment guide.
+
+### Security measures
+
+The API hashes passwords with bcrypt, enforces role-based access checks, validates input with shared Zod schemas, rate-limits login attempts, supports configurable account lockout, and records audit events for important actions. Sessions use opaque random access and refresh tokens stored and checked server-side. Session cookies are `httpOnly`, `sameSite` and configured `secure` in production. Electron enables context isolation and disables Node integration in the renderer; privileged functions are exposed through the preload bridge. These controls reduce risk but do not replace secure deployment, strong unique credentials, network protection, and database backups.
+
+### Testing and current validation limits
+
+The project provides unit/service tests, opt-in API acceptance checks, an Electron smoke test, and a separate LAN validation checklist. The desktop smoke test covers sign-in, loading data, navigation, and sign-out; it does not exercise every financial transaction in the UI. Integration checks require a disposable database with synthetic data. Consult the acceptance evidence before claiming a scenario is complete. The three-PC LAN check and any acceptance scenarios without recorded evidence still require validation in their target environment.
+
+For a demonstration, explain which checks were run, show their results, and identify the remaining environment-specific checks. Do not use real subscriber data in acceptance testing.
+
+### Source-code tour
+
+For a short code walkthrough, start at the desktop API client to show how a screen makes a request, follow the corresponding route from `packages/api/src/routes/index.ts`, then show the service that applies the business rule and the relevant Drizzle table in `packages/db/src/schema`. For billing and payment calculations, point to their API service implementations and the shared currency helpers in `packages/shared/src/types/index.ts`.
+
+### Use of AI tools
+
+AI tools assisted development by helping explain and review code, troubleshoot reported errors, and suggest implementation, testing, and documentation changes. Suggestions were reviewed against the project and checked with available build, typecheck, lint, or test commands as applicable. The developer remains responsible for the requirements, reviewing the generated suggestions, validating behavior, and presenting an accurate account of what was completed. Describe the actual tools and contributions used by your team during the defense.
+
 ## Useful commands
 
 | Command | Purpose |
