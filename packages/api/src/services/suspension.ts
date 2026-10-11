@@ -11,7 +11,7 @@ import {
   payments,
   auditLogs,
 } from '@bcis/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, asc } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 
 export interface SuspensionRequest {
@@ -59,7 +59,7 @@ export async function suspendServiceAccount(
       serviceAccountId: data.serviceAccountId,
       reason: data.reason,
       customReason: data.customReason,
-      effectiveDate: data.effectiveDate,
+      effectiveDate: data.effectiveDate.toISOString().slice(0, 10),
       approvedBy: actorId,
       notes: data.notes,
     }).returning();

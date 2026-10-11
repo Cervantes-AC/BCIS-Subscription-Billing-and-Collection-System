@@ -60,7 +60,7 @@ const STATUS_BADGES: Record<string, { label: string; class: string }> = {
 
 export function CollectionsPage() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'batches' | 'create' | 'remittance'>('batches');
+  const [activeTab, setActiveTab] = useState<'batches' | 'create' | 'remittance' | 'assignments'>('batches');
   const [selectedBatch, setSelectedBatch] = useState<CollectionBatch | null>(null);
   const [showRouteSheet, setShowRouteSheet] = useState(false);
 
@@ -71,12 +71,18 @@ export function CollectionsPage() {
 
   const { data: collectors } = useQuery({
     queryKey: ['collectors'],
-    queryFn: () => api.listUsers({ role: 'collector' }),
+    queryFn: () => api.listCollectionCollectors(),
   });
 
   const { data: areas } = useQuery({
     queryKey: ['collection-areas'],
     queryFn: () => api.listCollectionAreas({ page: 1, limit: 100 }),
+  });
+
+  const { data: routeSheetData, isLoading: routeSheetLoading } = useQuery({
+    queryKey: ['collection-route-sheet', selectedBatch?.id],
+    queryFn: () => api.getRouteSheet(selectedBatch!.id),
+    enabled: showRouteSheet && !!selectedBatch?.id,
   });
 
   const createBatchMutation = useMutation({
@@ -97,14 +103,14 @@ export function CollectionsPage() {
   });
 
   const submitRemittanceMutation = useMutation({
-    mutationFn: (data: any) => api.submitRemittance(data),
+    mutationFn: (data: any) => api.submitRemittance(data.batchId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['collection-batches'] });
     },
   });
 
   const reconcileMutation = useMutation({
-    mutationFn: (data: any) => api.reconcileBatch(data),
+    mutationFn: (data: any) => api.reconcileBatch(data.batchId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['collection-batches'] });
     },
@@ -181,6 +187,29 @@ export function CollectionsPage() {
     }
   };
 
+  const areaItems = (areas as any)?.data?.items ?? (areas as any)?.items ?? [];
+  const collectorItems = (collectors as any)?.data?.items ?? (collectors as any)?.items ?? [];
+  const batchItems = (batchesData as any)?.data?.items ?? (batchesData as any)?.items ?? [];
+  const routeSheetItems = (routeSheetData as any)?.data ?? (routeSheetData as any)?.items ?? [];
+
+  if (activeTab === 'assignments') {
+    return (
+      <section className="p-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <div><h2 className="page-title">Collector Assignments</h2><p className="text-sm text-text-muted mt-1">Assign a collector to each collection area.</p></div>
+          <button onClick={() => setActiveTab('batches')} className="px-4 py-2 border rounded-lg">Back to Collections</button>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {areaItems.map((area: any) => <CollectorAssignmentCard key={area.id} area={area} collectors={collectorItems} onAssigned={() => {
+            queryClient.invalidateQueries({ queryKey: ['collection-areas'] });
+            queryClient.invalidateQueries({ queryKey: ['collection-batches'] });
+          }} />)}
+        </div>
+        {areaItems.length === 0 && <p className="rounded-lg bg-surface p-6 text-text-muted">No collection areas are available.</p>}
+      </section>
+    );
+  }
+
   if (activeTab === 'create') {
     return (
       <section className="p-6 max-w-3xl mx-auto">
@@ -195,8 +224,8 @@ export function CollectionsPage() {
         </div>
 
         <CreateBatchForm
-          collectors={collectors?.items || []}
-          areas={areas?.items || []}
+          collectors={collectorItems}
+          areas={areaItems}
           onSubmit={handleCreateBatch}
           isSubmitting={createBatchMutation.isPending}
         />
@@ -232,13 +261,10 @@ export function CollectionsPage() {
     <section className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h2 className="page-title">Collections</h2>
-        <button
-          onClick={() => setActiveTab('create')}
-          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          New Batch
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setActiveTab('assignments')} className="px-4 py-2 border border-gray-300 rounded-lg">Assign Collectors</button>
+          <button onClick={() => setActiveTab('create')} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 flex items-center gap-2"><Plus className="w-4 h-4" />New Batch</button>
+        </div>
       </div>
 
       {/* Batch List */}
@@ -276,7 +302,7 @@ export function CollectionsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {batchesData?.items?.map((batch: CollectionBatch) => (
+              {batchItems.map((batch: CollectionBatch) => (
                 <tr key={batch.id} className="hover:bg-gray-50 cursor-pointer"
                   onClick={() => { setSelectedBatch(batch); setActiveTab('remittance'); }}
                 >
@@ -300,10 +326,10 @@ export function CollectionsPage() {
                   <td className="px-4 py-3 text-right font-mono text-red-600">{formatCurrency(batch.shortage)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <button className="p-1 hover:bg-gray-100 rounded" title="View Route Sheet">
+                      <button onClick={(event) => { event.stopPropagation(); setSelectedBatch(batch); setShowRouteSheet(true); }} className="p-1 hover:bg-gray-100 rounded" title="View Route Sheet" aria-label={`Print route sheet for ${batch.batchNumber}`}>
                         <FileText className="w-4 h-4" />
                       </button>
-                      <button className="p-1 hover:bg-gray-100 rounded" title="View Details">
+                      <button onClick={(event) => { event.stopPropagation(); setSelectedBatch(batch); setActiveTab('remittance'); }} className="p-1 hover:bg-gray-100 rounded" title="View Details">
                         <Eye className="w-4 h-4" />
                       </button>
                     </div>
@@ -314,7 +340,7 @@ export function CollectionsPage() {
           </table>
         </div>
 
-        {batchesData?.items?.length === 0 && (
+        {batchItems.length === 0 && (
           <div className="p-12 text-center">
             <Package className="w-12 h-12 mx-auto text-text-muted mb-4" />
             <p className="text-text-muted">No collection batches found</p>
@@ -327,8 +353,34 @@ export function CollectionsPage() {
           </div>
         )}
       </div>
+      {showRouteSheet && selectedBatch && (
+        <div className="route-sheet-print fixed inset-0 z-50 overflow-auto bg-black/50 p-4 print:static print:bg-white print:p-0">
+          <div className="mx-auto max-w-5xl rounded-lg bg-white p-6 print:max-w-none print:rounded-none print:p-0">
+            <div className="mb-5 flex items-center justify-between print:hidden">
+              <h3 className="text-lg font-semibold">Route Sheet · {selectedBatch.batchNumber}</h3>
+              <div className="flex gap-2"><button onClick={() => window.print()} className="rounded bg-primary px-4 py-2 text-white">Print</button><button onClick={() => setShowRouteSheet(false)} className="rounded border px-4 py-2">Close</button></div>
+            </div>
+            <div className="mb-4 hidden print:block"><h1 className="text-xl font-bold">BCIS Collection Route Sheet</h1><p>{selectedBatch.batchNumber} · {selectedBatch.collector?.fullName ?? 'Collector'} · {selectedBatch.area?.name ?? 'Area'} · {new Date(selectedBatch.collectionDate).toLocaleDateString()}</p></div>
+            {routeSheetLoading ? <p>Loading route sheet…</p> : <table className="w-full border-collapse text-sm"><thead><tr>{['Account','Subscriber / Contact','Address','Service','Current Bill','Arrears','Total Due','Collected','Signature'].map((label) => <th key={label} className="border p-2 text-left">{label}</th>)}</tr></thead><tbody>{routeSheetItems.map((item: any) => <tr key={item.serviceAccountId}><td className="border p-2 font-mono">{item.serviceAccountNumber}</td><td className="border p-2">{item.subscriberName}<br />{item.subscriberContact}</td><td className="border p-2">{item.address}</td><td className="border p-2">{item.planName}</td><td className="border p-2 text-right">{formatCurrency(item.currentBill)}</td><td className="border p-2 text-right">{formatCurrency(item.arrears)}</td><td className="border p-2 text-right font-semibold">{formatCurrency(item.totalDue)}</td><td className="border p-2" /><td className="border p-2" /></tr>)}</tbody></table>}
+          </div>
+        </div>
+      )}
     </section>
   );
+}
+
+function CollectorAssignmentCard({ area, collectors, onAssigned }: { area: any; collectors: any[]; onAssigned: () => void }) {
+  const [collectorId, setCollectorId] = useState(area.collectorId ?? '');
+  const mutation = useMutation({ mutationFn: () => api.assignCollector(area.id, collectorId), onSuccess: onAssigned });
+  return <form onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }} className="rounded-lg bg-surface p-5 shadow-sm">
+    <h3 className="font-semibold">{area.name}</h3><p className="mb-4 text-sm text-text-muted">{area.code}</p>
+    <label className="mb-2 block text-sm font-medium">Assigned collector</label>
+    <select value={collectorId} onChange={(event) => setCollectorId(event.target.value)} className="mb-4 w-full rounded border p-2" required>
+      <option value="">Select collector</option>{collectors.map((collector: any) => <option key={collector.id} value={collector.id}>{collector.fullName}</option>)}
+    </select>
+    <button type="submit" disabled={!collectorId || mutation.isPending} className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50">{mutation.isPending ? 'Saving…' : 'Save assignment'}</button>
+    {mutation.isError && <p role="alert" className="mt-2 text-sm text-red-600">{(mutation.error as Error).message}</p>}
+  </form>;
 }
 
 function CreateBatchForm({ collectors, areas, onSubmit, isSubmitting }: any) {

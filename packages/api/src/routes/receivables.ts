@@ -1,8 +1,9 @@
-/**
+﻿/**
  * Receivables routes - Fully implemented
  */
 
 import { FastifyInstance } from 'fastify';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { UUIDSchema, PaginationSchema, AgingReportRequestSchema, StatementOfAccountRequestSchema } from '@bcis/shared';
 import { 
@@ -17,14 +18,16 @@ import {
   reconnectServiceAccount,
   getSuspensionHistory,
 } from '../services/suspension';
+import { requestContext } from '../utils/request-context';
 import { generateStatementOfAccountPDF } from '../services/reports';
 
 export async function receivablesRoutes(fastify: FastifyInstance) {
-  fastify.get('/receivables/summary', {
+  const app = fastify.withTypeProvider<ZodTypeProvider>();
+  app.get('/receivables/summary', {
     preHandler: fastify.authorize('receivables.view'),
   }, async (request, reply) => {
     const query = request.query as any;
-    const { summary } = await calculateAging(query.asOfDate ? new Date(query.asOfDate) : new Date(), {
+    const { summary } = await calculateAging(fastify, query.asOfDate ? new Date(query.asOfDate) : new Date(), {
       collectorId: query.collectorId,
       areaId: query.areaId,
       planId: query.planId,
@@ -33,12 +36,12 @@ export async function receivablesRoutes(fastify: FastifyInstance) {
     return { success: true, data: summary };
   });
 
-  fastify.get('/receivables/overdue', {
+  app.get('/receivables/overdue', {
     schema: { querystring: PaginationSchema.extend({ collectorId: UUIDSchema.optional(), areaId: UUIDSchema.optional(), planId: UUIDSchema.optional(), serviceType: z.enum(['internet', 'cable', 'combo']).optional(), minMonthsUnpaid: z.number().int().min(0).optional(), maxMonthsUnpaid: z.number().int().min(0).optional() }) },
     preHandler: fastify.authorize('receivables.view'),
   }, async (request, reply) => {
     const query = request.query as any;
-    const result = await getOverdueAccounts({
+    const result = await getOverdueAccounts(fastify, {
       page: query.page || 1,
       limit: query.limit || 20,
       collectorId: query.collectorId,
@@ -53,12 +56,12 @@ export async function receivablesRoutes(fastify: FastifyInstance) {
     return { success: true, data: result };
   });
 
-  fastify.get('/receivables/aging', {
+  app.get('/receivables/aging', {
     schema: { querystring: AgingReportRequestSchema },
     preHandler: fastify.authorize('receivables.view'),
   }, async (request, reply) => {
     const query = request.query as any;
-    const { summary, details } = await calculateAging(new Date(query.asOfDate), {
+    const { summary, details } = await calculateAging(fastify, new Date(query.asOfDate), {
       collectorId: query.collectorId,
       areaId: query.areaId,
       planId: query.planId,
@@ -67,12 +70,12 @@ export async function receivablesRoutes(fastify: FastifyInstance) {
     return { success: true, data: { summary, details } };
   });
 
-  fastify.get('/receivables/suspension-candidates', {
+  app.get('/receivables/suspension-candidates', {
     schema: { querystring: PaginationSchema.extend({ collectorId: UUIDSchema.optional(), areaId: UUIDSchema.optional() }) },
     preHandler: fastify.authorize('receivables.suspend'),
   }, async (request, reply) => {
     const query = request.query as any;
-    const result = await getSuspensionCandidates({
+    const result = await getSuspensionCandidates(fastify, {
       page: query.page || 1,
       limit: query.limit || 20,
       collectorId: query.collectorId,
@@ -82,7 +85,7 @@ export async function receivablesRoutes(fastify: FastifyInstance) {
   });
 
   // Collection efficiency
-  fastify.get('/receivables/collection-efficiency', {
+  app.get('/receivables/collection-efficiency', {
     schema: { 
       querystring: z.object({ 
         dateFrom: z.string().datetime(), 
@@ -94,7 +97,7 @@ export async function receivablesRoutes(fastify: FastifyInstance) {
     preHandler: fastify.authorize('receivables.view'),
   }, async (request, reply) => {
     const query = request.query as any;
-    const result = await getCollectionEfficiency({
+    const result = await getCollectionEfficiency(fastify, {
       dateFrom: new Date(query.dateFrom),
       dateTo: new Date(query.dateTo),
       collectorId: query.collectorId,
@@ -104,7 +107,7 @@ export async function receivablesRoutes(fastify: FastifyInstance) {
   });
 
   // Revenue report
-  fastify.get('/receivables/revenue', {
+  app.get('/receivables/revenue', {
     schema: { 
       querystring: z.object({ 
         dateFrom: z.string().datetime(), 
@@ -115,7 +118,7 @@ export async function receivablesRoutes(fastify: FastifyInstance) {
     preHandler: fastify.authorize('receivables.view'),
   }, async (request, reply) => {
     const query = request.query as any;
-    const result = await getRevenueReport({
+    const result = await getRevenueReport(fastify, {
       dateFrom: new Date(query.dateFrom),
       dateTo: new Date(query.dateTo),
       groupBy: query.groupBy,
@@ -124,14 +127,14 @@ export async function receivablesRoutes(fastify: FastifyInstance) {
   });
 
   // Suspension
-  fastify.post('/service-accounts/:id/suspend', {
+  app.post('/service-accounts/:id/suspend', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: z.object({ reason: z.enum(['non_payment', 'request', 'violation', 'technical', 'other']), customReason: z.string().max(500).optional(), effectiveDate: z.string().datetime(), notes: z.string().max(1000).optional() }),
     },
     preHandler: fastify.authorize('receivables.suspend'),
   }, async (request, reply) => {
-    const result = await suspendServiceAccount(fastify, {
+    const result = await suspendServiceAccount(requestContext(fastify, request), {
       serviceAccountId: request.params.id,
       reason: request.body.reason,
       customReason: request.body.customReason,
@@ -142,14 +145,14 @@ export async function receivablesRoutes(fastify: FastifyInstance) {
   });
 
   // Reconnection
-  fastify.post('/service-accounts/:id/reconnect', {
+  app.post('/service-accounts/:id/reconnect', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: z.object({ suspensionId: UUIDSchema, fee: z.number().int().min(0), paymentId: UUIDSchema.optional(), technicianId: UUIDSchema.optional(), scheduledDate: z.string().datetime().optional(), notes: z.string().max(1000).optional() }),
     },
     preHandler: fastify.authorize('receivables.reconnect'),
   }, async (request, reply) => {
-    const result = await reconnectServiceAccount(fastify, {
+    const result = await reconnectServiceAccount(requestContext(fastify, request), {
       suspensionId: request.body.suspensionId,
       fee: request.body.fee,
       paymentId: request.body.paymentId,
@@ -161,21 +164,22 @@ export async function receivablesRoutes(fastify: FastifyInstance) {
   });
 
   // Suspension history
-  fastify.get('/service-accounts/:id/suspension-history', {
+  app.get('/service-accounts/:id/suspension-history', {
     schema: { params: z.object({ id: UUIDSchema }) },
     preHandler: fastify.authorize('receivables.view'),
   }, async (request, reply) => {
-    const history = await getSuspensionHistory(fastify, request.params.id);
+    const history = await getSuspensionHistory(requestContext(fastify, request), request.params.id);
     return { success: true, data: history };
   });
 
   // Statement of Account
-  fastify.get('/subscribers/:id/statement', {
+  app.get('/subscribers/:id/statement', {
     schema: { params: z.object({ id: UUIDSchema }), querystring: StatementOfAccountRequestSchema },
     preHandler: fastify.authorize('subscriber.view'),
   }, async (request, reply) => {
     const query = request.query as any;
     const pdfBuffer = await generateStatementOfAccountPDF(
+      fastify,
       request.params.id,
       query.serviceAccountId,
       query.dateFrom ? new Date(query.dateFrom) : undefined,

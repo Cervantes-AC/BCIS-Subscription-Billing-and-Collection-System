@@ -9,6 +9,7 @@ import { resolve } from 'path';
 dotenvConfig({ path: resolve(__dirname, '../../../.env') });
 
 import Fastify from 'fastify';
+import { z } from 'zod';
 import { config } from './config';
 import databasePlugin from './plugins/database';
 import corsPlugin from './plugins/cors';
@@ -38,6 +39,13 @@ async function buildServer() {
       },
     },
   });
+
+  // The routes use Zod schemas directly; adapt them for Fastify's validator and serializer.
+  fastify.setValidatorCompiler(({ schema }) => (data) => {
+    const parsed = (schema as z.ZodType).safeParse(data);
+    return parsed.success ? { value: parsed.data } : { error: parsed.error };
+  });
+  fastify.setSerializerCompiler(({ schema }) => (data) => JSON.stringify((schema as z.ZodType).parse(data)));
 
   // Register plugins
   await fastify.register(corsPlugin);

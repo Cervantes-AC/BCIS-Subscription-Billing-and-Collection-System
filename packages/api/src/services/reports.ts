@@ -333,14 +333,6 @@ export async function generateStatementOfAccountPDF(
                   allocations: { with: { payment: true } },
                 },
               },
-              payments: {
-                where: and(
-                  dateFrom ? gte(payments.paymentDate, dateFrom) : undefined,
-                  dateTo ? lte(payments.paymentDate, dateTo) : undefined,
-                  or(eq(payments.status, 'posted'), eq(payments.status, 'verified')),
-                ),
-                orderBy: desc(payments.paymentDate),
-              },
             },
           },
         },
@@ -410,7 +402,7 @@ export async function generateStatementOfAccountPDF(
           ledgerEntries.push({
             date: inv.generatedAt,
             ref: inv.invoiceNumber,
-            description: `${inv.periodStart.toLocaleDateString()} - ${inv.periodEnd.toLocaleDateString()} Billing`,
+            description: `${new Date(inv.periodStart).toLocaleDateString()} - ${new Date(inv.periodEnd).toLocaleDateString()} Billing`,
             debit: Number(inv.totalAmount),
             credit: 0,
             balance: runningBalance + Number(inv.totalAmount),
@@ -419,16 +411,20 @@ export async function generateStatementOfAccountPDF(
         }
 
         // Add payments as credits
-        for (const pmt of sa.payments) {
+        const serviceAllocations = sa.invoices.flatMap((invoice) => invoice.allocations);
+        for (const allocation of serviceAllocations) {
+          const payment = allocation.payment;
+          if (!payment || (dateFrom && payment.paymentDate < dateFrom) || (dateTo && payment.paymentDate > dateTo)) continue;
+          const credit = Number(allocation.amount);
           ledgerEntries.push({
-            date: pmt.paymentDate,
-            ref: pmt.receiptNumber,
-            description: `${pmt.method.toUpperCase()} Payment`,
+            date: payment.paymentDate,
+            ref: payment.receiptNumber,
+            description: `${payment.method.toUpperCase()} Payment`,
             debit: 0,
-            credit: Number(pmt.amount),
-            balance: runningBalance - Number(pmt.amount),
+            credit,
+            balance: runningBalance - credit,
           });
-          runningBalance -= Number(pmt.amount);
+          runningBalance -= credit;
         }
 
         // Sort by date
@@ -523,8 +519,8 @@ export async function generateCollectorRemittanceReportXLSX(
   });
 
   const batchConditions = [
-    gte(collectionBatches.collectionDate, dateFrom.toISOString().split('T')[0]),
-    lte(collectionBatches.collectionDate, dateTo.toISOString().split('T')[0]),
+    gte(collectionBatches.collectionDate, dateFrom.toISOString().slice(0, 10)),
+    lte(collectionBatches.collectionDate, dateTo.toISOString().slice(0, 10)),
   ];
   if (collectorId) batchConditions.push(eq(collectionBatches.collectorId, collectorId));
 
@@ -544,7 +540,7 @@ export async function generateCollectorRemittanceReportXLSX(
     
     sheet.getCell(row, 1).value = batch.collector?.fullName || 'Unknown';
     sheet.getCell(row, 2).value = batch.batchNumber;
-    sheet.getCell(row, 3).value = batch.collectionDate.toLocaleDateString();
+    sheet.getCell(row, 3).value = new Date(batch.collectionDate).toLocaleDateString();
     sheet.getCell(row, 4).value = centavosToPesos(Number(batch.expectedCash));
     sheet.getCell(row, 4).numFmt = '#,##0.00';
     sheet.getCell(row, 5).value = centavosToPesos(remittedCash);
@@ -668,7 +664,8 @@ export async function generateBillingVsCollectionReportXLSX(
   const monthlyData = new Map<string, { billed: number; collected: number }>();
   
   for (const inv of billingInvoices) {
-    const key = `${inv.periodStart.getFullYear()}-${String(inv.periodStart.getMonth() + 1).padStart(2, '0')}`;
+    const periodStart = new Date(inv.periodStart);
+    const key = `${periodStart.getFullYear()}-${String(periodStart.getMonth() + 1).padStart(2, '0')}`;
     if (!monthlyData.has(key)) monthlyData.set(key, { billed: 0, collected: 0 });
     monthlyData.get(key)!.billed += Number(inv.totalAmount);
   }

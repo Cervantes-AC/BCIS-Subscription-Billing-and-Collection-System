@@ -246,7 +246,7 @@ export function SubscribersPage() {
           title="Edit Subscriber"
           initialData={selectedSubscriber}
           onClose={() => { setShowEditModal(false); setSelectedSubscriber(null); }}
-          onSubmit={(data) => handleUpdate(selectedSubscriber.id, data)}
+          onSubmit={(data: any) => handleUpdate(selectedSubscriber.id, data)}
           isSubmitting={updateMutation.isPending}
           areas={areas?.items || []}
           collectors={collectors?.items || []}

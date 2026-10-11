@@ -36,7 +36,7 @@ export function SubscriberSearch({ onSelect, selected }: SubscriberSearchProps) 
     setIsLoading(true);
     try {
       const response = await api.searchSubscribers({ q, limit: 10 });
-      setResults(response.data.subscribers || []);
+      setResults((response.data as { subscribers?: SubscriberSearchResult[] }).subscribers || []);
     } catch (error) {
       console.error('Search failed:', error);
       setResults([]);

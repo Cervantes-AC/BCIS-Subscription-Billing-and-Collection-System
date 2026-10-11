@@ -17,6 +17,7 @@ import {
 import { eq, and, or, gte, lte, isNull, not, inArray, sql, desc, asc, count, sum } from 'drizzle-orm';
 import { generateInvoiceNumber } from '../utils/numbering';
 import type { FastifyInstance } from 'fastify';
+import { sortColumn } from '../utils/sort-column';
 
 export interface BillingGenerationResult {
   success: boolean;
@@ -238,7 +239,7 @@ export async function generateMonthlyBilling(
             quantity: 1,
             unitPrice: subscriptionCharge,
             amount: subscriptionCharge,
-            type: 'subscription',
+            type: 'subscription' as const,
             sortOrder: 1,
           },
           ...(firstInstallationFee > 0 ? [{
@@ -247,7 +248,7 @@ export async function generateMonthlyBilling(
             quantity: 1,
             unitPrice: firstInstallationFee,
             amount: firstInstallationFee,
-            type: 'installation',
+            type: 'installation' as const,
             sortOrder: 2,
           }] : []),
           ...(reconnectionFee > 0 ? [{
@@ -256,7 +257,7 @@ export async function generateMonthlyBilling(
             quantity: 1,
             unitPrice: reconnectionFee,
             amount: reconnectionFee,
-            type: 'reconnection',
+            type: 'reconnection' as const,
             sortOrder: 3,
           }] : []),
           ...(penalty > 0 ? [{
@@ -265,7 +266,7 @@ export async function generateMonthlyBilling(
             quantity: 1,
             unitPrice: penalty,
             amount: penalty,
-            type: 'penalty',
+            type: 'penalty' as const,
             sortOrder: 4,
           }] : []),
         ]);
@@ -402,6 +403,15 @@ export async function getInvoiceWithDetails(fastify: FastifyInstance, invoiceId:
 
   return {
     ...invoice,
+    periodStart: new Date(invoice.periodStart),
+    periodEnd: new Date(invoice.periodEnd),
+    dueDate: new Date(invoice.dueDate),
+    notes: invoice.notes ?? undefined,
+    finalizedAt: invoice.finalizedAt ?? undefined,
+    finalizedBy: invoice.finalizedBy ?? undefined,
+    voidedAt: invoice.voidedAt ?? undefined,
+    voidedBy: invoice.voidedBy ?? undefined,
+    voidReason: invoice.voidReason ?? undefined,
     items: invoice.items.map(item => ({
       ...item,
       amount: Number(item.amount),
@@ -410,6 +420,7 @@ export async function getInvoiceWithDetails(fastify: FastifyInstance, invoiceId:
     adjustments: invoice.adjustments.map(adj => ({
       ...adj,
       amount: Number(adj.amount),
+      referenceNumber: adj.referenceNumber ?? undefined,
     })),
     allocations: invoice.allocations.map(alloc => ({
       ...alloc,
@@ -465,7 +476,7 @@ export async function updateInvoice(
   
   // Calculate new totals
   let newTotalAmount = Number(invoice.subscriptionCharge) + Number(invoice.installationFee) + Number(invoice.reconnectionFee);
-  newTotalAmount = newTotalAmount - (data.discount ?? Number(invoice.discount)) + (data.penalty ?? Number(invoice.penalty)) + (data.adjustments ?? Number(invoice.adjustmentsAmount));
+  newTotalAmount = newTotalAmount - (data.discount ?? Number(invoice.discount)) + (data.penalty ?? Number(invoice.penalty)) + (data.adjustments ?? Number(invoice.adjustments));
   
   const newBalance = newTotalAmount - Number(invoice.paidAmount);
 
@@ -510,13 +521,10 @@ export async function createBillingCycle(fastify: FastifyInstance, data: {
 }, actorId: string) {
   const db = fastify.db;
   
-  const periodStartStr = data.periodStart.toISOString().split('T')[0];
-  const periodEndStr = data.periodEnd.toISOString().split('T')[0];
-  
   const existing = await db.query.billingCycles.findFirst({
     where: and(
-      eq(billingCycles.periodStart, periodStartStr),
-      eq(billingCycles.periodEnd, periodEndStr)
+      eq(billingCycles.periodStart, data.periodStart.toISOString().slice(0, 10)),
+      eq(billingCycles.periodEnd, data.periodEnd.toISOString().slice(0, 10))
     ),
   });
 
@@ -526,9 +534,9 @@ export async function createBillingCycle(fastify: FastifyInstance, data: {
 
   const [cycle] = await db.insert(billingCycles).values({
     name: data.name,
-    periodStart: periodStartStr,
-    periodEnd: periodEndStr,
-    dueDate: data.dueDate.toISOString().split('T')[0],
+    periodStart: data.periodStart.toISOString().slice(0, 10),
+    periodEnd: data.periodEnd.toISOString().slice(0, 10),
+    dueDate: data.dueDate.toISOString().slice(0, 10),
     status: 'open',
     generatedBy: actorId,
   }).returning();
@@ -558,7 +566,7 @@ export async function listBillingCycles(fastify: FastifyInstance, params: {
   const offset = (page - 1) * limit;
   const db = fastify.db;
 
-  const orderColumn = billingCycles[sortBy as keyof typeof billingCycles] || billingCycles.periodStart;
+  const orderColumn = sortColumn({ periodStart: billingCycles.periodStart, name: billingCycles.name, status: billingCycles.status, createdAt: billingCycles.createdAt }, sortBy, 'periodStart');
   const orderFn = sortOrder === 'asc' ? asc : desc;
 
   const [items, totalResult] = await Promise.all([
@@ -616,8 +624,8 @@ export async function listInvoices(fastify: FastifyInstance, params: {
   if (filters.status) conditions.push(eq(invoices.status, filters.status as any));
   if (filters.dateFrom) conditions.push(gte(invoices.generatedAt, filters.dateFrom));
   if (filters.dateTo) conditions.push(lte(invoices.generatedAt, filters.dateTo));
-  if (filters.dueDateFrom) conditions.push(gte(invoices.dueDate, filters.dueDateFrom.toISOString().split('T')[0]));
-  if (filters.dueDateTo) conditions.push(lte(invoices.dueDate, filters.dueDateTo.toISOString().split('T')[0]));
+  if (filters.dueDateFrom) conditions.push(gte(invoices.dueDate, filters.dueDateFrom.toISOString().slice(0, 10)));
+  if (filters.dueDateTo) conditions.push(lte(invoices.dueDate, filters.dueDateTo.toISOString().slice(0, 10)));
 
   // For subscriberId, need to join through serviceAccounts
   if (filters.subscriberId) {
@@ -631,7 +639,7 @@ export async function listInvoices(fastify: FastifyInstance, params: {
     }
   }
 
-  const orderColumn = invoices[filters.sortBy as keyof typeof invoices] || invoices.generatedAt;
+  const orderColumn = sortColumn({ generatedAt: invoices.generatedAt, invoiceNumber: invoices.invoiceNumber, dueDate: invoices.dueDate, totalAmount: invoices.totalAmount, status: invoices.status }, filters.sortBy, 'generatedAt');
   const orderFn = filters.sortOrder === 'asc' ? asc : desc;
 
   const [items, totalResult] = await Promise.all([

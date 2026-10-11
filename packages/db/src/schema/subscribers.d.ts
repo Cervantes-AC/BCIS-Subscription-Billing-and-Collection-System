@@ -1,4 +1,4 @@
-/**
+﻿/**
  * BCIS Database Schema - Subscriber Tables
  * Subscribers, addresses, contacts
  */

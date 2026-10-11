@@ -6,6 +6,7 @@
 import { 
   payments, 
   paymentAllocations, 
+  subscriberCredits,
   invoices, 
   invoiceItems,
   paymentProofs,
@@ -19,6 +20,7 @@ import {
 import { eq, and, or, gte, lte, isNull, not, inArray, sql, desc, asc, sum, count } from 'drizzle-orm';
 import { generateReceiptNumber } from '../utils/numbering';
 import type { FastifyInstance } from 'fastify';
+import { sortColumn } from '../utils/sort-column';
 
 export interface PaymentAllocationPreviewItem {
   invoiceId: string;
@@ -49,6 +51,7 @@ export interface CreatePaymentResult {
     id: string;
     receiptNumber: string;
   };
+  creditAmount: number;
 }
 
 /**
@@ -109,7 +112,7 @@ export async function getAllocationPreview(
       serviceAccountId: inv.serviceAccountId,
       serviceType: inv.serviceAccount.plan.type,
       planName: inv.serviceAccount.plan.name,
-      period: `${inv.periodStart.toISOString().split('T')[0]} to ${inv.periodEnd.toISOString().split('T')[0]}`,
+      period: `${new Date(inv.periodStart).toISOString().split('T')[0]} to ${new Date(inv.periodEnd).toISOString().split('T')[0]}`,
       totalAmount: Number(inv.totalAmount),
       paidAmount: Number(inv.paidAmount),
       balance,
@@ -152,6 +155,7 @@ export async function createPayment(
     referenceNumber?: string;
     paymentDate: Date;
     notes?: string;
+    gcashVerified?: boolean;
     allocations?: Array<{ invoiceId: string; amount: number }>;
     proofFile?: {
       fileName: string;
@@ -163,6 +167,9 @@ export async function createPayment(
 ): Promise<CreatePaymentResult> {
   const actorId = fastify.requestUser?.id;
   if (!actorId) throw new Error('User not authenticated');
+  if (data.method === 'gcash' && !data.gcashVerified) {
+    throw new Error('GCash payments must be submitted to the verification queue before posting');
+  }
   const db = fastify.db;
 
   // Verify subscriber exists
@@ -211,10 +218,11 @@ export async function createPayment(
   }
 
   // Generate receipt number
-  const receiptNumber = await generateReceiptNumber(fastify);
+  const creditAmount = Math.max(0, data.amount - totalAllocated);
 
   // Create payment in transaction
   const [payment] = await db.transaction(async (tx) => {
+    const receiptNumber = await generateReceiptNumber(fastify, tx);
     // Insert payment
     const [newPayment] = await tx.insert(payments).values({
       receiptNumber,
@@ -224,7 +232,9 @@ export async function createPayment(
       referenceNumber: data.referenceNumber,
       paymentDate: data.paymentDate,
       postedBy: actorId,
-      status: data.method === 'gcash' ? 'pending' : 'posted', // GCash needs verification
+      status: data.method === 'gcash' ? 'verified' : 'posted',
+      verifiedAt: data.method === 'gcash' ? new Date() : undefined,
+      verifiedBy: data.method === 'gcash' ? actorId : undefined,
       notes: data.notes,
     }).returning();
 
@@ -239,30 +249,33 @@ export async function createPayment(
         });
 
         // Update invoice paid amount and balance
-        const invoice = await tx.query.invoices.findFirst({
-          where: eq(invoices.id, alloc.invoiceId),
-        });
-        if (invoice) {
-          const newPaidAmount = Number(invoice.paidAmount) + alloc.amount;
-          const newBalance = Number(invoice.totalAmount) - newPaidAmount;
-          let newStatus = invoice.status;
-          
-          if (newBalance <= 0) {
-            newStatus = 'paid';
-          } else if (newPaidAmount > 0) {
-            newStatus = 'partially_paid';
-          }
-
-          await tx.update(invoices)
-            .set({
-              paidAmount: newPaidAmount,
-              balance: newBalance,
-              status: newStatus,
-              updatedAt: new Date(),
-            })
-            .where(eq(invoices.id, alloc.invoiceId));
-        }
+        // Perform a conditional atomic update so concurrent cashiers cannot over-allocate
+        // from a stale preview. If another payment consumed the balance, roll back this transaction.
+        const updated = await tx.update(invoices)
+          .set({
+            paidAmount: sql`${invoices.paidAmount} + ${alloc.amount}`,
+            balance: sql`${invoices.balance} - ${alloc.amount}`,
+            status: sql`CASE WHEN ${invoices.balance} - ${alloc.amount} <= 0 THEN 'paid'::invoice_status ELSE 'partially_paid'::invoice_status END`,
+            updatedAt: new Date(),
+          })
+          .where(and(
+            eq(invoices.id, alloc.invoiceId),
+            gte(invoices.balance, alloc.amount),
+            inArray(invoices.status, ['unpaid', 'partially_paid', 'overdue'])
+          ))
+          .returning({ id: invoices.id });
+        if (updated.length === 0) throw new Error(`Invoice ${alloc.invoiceId} balance changed; refresh the allocation preview and retry`);
       }
+    }
+
+    if (creditAmount > 0) {
+      await tx.insert(subscriberCredits).values({
+        subscriberId: data.subscriberId,
+        sourcePaymentId: newPayment.id,
+        amount: creditAmount,
+        remainingAmount: creditAmount,
+        createdBy: actorId,
+      });
     }
 
     // Create receipt record
@@ -311,6 +324,17 @@ export async function createPayment(
       id: payment.id,
       receiptNumber: payment.receiptNumber,
     },
+    creditAmount,
+  };
+}
+
+export async function getSubscriberCreditBalance(fastify: FastifyInstance, subscriberId: string) {
+  const credits = await fastify.db.query.subscriberCredits.findMany({
+    where: eq(subscriberCredits.subscriberId, subscriberId),
+  });
+  return {
+    balance: credits.reduce((total, credit) => total + Number(credit.remainingAmount), 0),
+    credits: credits.map((credit) => ({ ...credit, amount: Number(credit.amount), remainingAmount: Number(credit.remainingAmount) })),
   };
 }
 
@@ -345,9 +369,8 @@ export async function reversePayment(
   }
 
   // Create reversal payment (negative amount)
-  const reversalReceiptNumber = await generateReceiptNumber(fastify);
-  
   await db.transaction(async (tx) => {
+    const reversalReceiptNumber = await generateReceiptNumber(fastify, tx);
     // Create reversal payment record
     const [reversalPayment] = await tx.insert(payments).values({
       receiptNumber: reversalReceiptNumber,
@@ -374,33 +397,30 @@ export async function reversePayment(
 
     // Reverse allocations - update invoice balances
     for (const alloc of payment.allocations) {
-      const invoice = alloc.invoice;
-      const newPaidAmount = Number(invoice.paidAmount) - alloc.amount;
-      const newBalance = Number(invoice.totalAmount) - newPaidAmount;
-      let newStatus = 'unpaid';
-      
-      if (newPaidAmount > 0 && newBalance > 0) {
-        newStatus = 'partially_paid';
-      } else if (newPaidAmount >= Number(invoice.totalAmount)) {
-        newStatus = 'paid';
-      }
-
-      await tx.update(invoices)
+      const updated = await tx.update(invoices)
         .set({
-          paidAmount: Math.max(0, newPaidAmount),
-          balance: newBalance,
-          status: newStatus,
+          paidAmount: sql`GREATEST(0, ${invoices.paidAmount} - ${alloc.amount})`,
+          balance: sql`LEAST(${invoices.totalAmount}, ${invoices.balance} + ${alloc.amount})`,
+          status: sql`CASE
+            WHEN ${invoices.paidAmount} - ${alloc.amount} >= ${invoices.totalAmount} THEN 'paid'::invoice_status
+            WHEN ${invoices.paidAmount} - ${alloc.amount} > 0 THEN 'partially_paid'::invoice_status
+            WHEN ${invoices.dueDate} < CURRENT_DATE THEN 'overdue'::invoice_status
+            ELSE 'unpaid'::invoice_status
+          END`,
           updatedAt: new Date(),
         })
-        .where(eq(invoices.id, invoice.id));
+        .where(and(eq(invoices.id, alloc.invoiceId), gte(invoices.paidAmount, alloc.amount)))
+        .returning({ id: invoices.id });
+      if (updated.length === 0) throw new Error(`Cannot reverse allocation for invoice ${alloc.invoiceId}: paid amount is below the allocation`);
 
-      // Delete the allocation
-      await tx.delete(paymentAllocations)
-        .where(and(
-          eq(paymentAllocations.paymentId, payment.id),
-          eq(paymentAllocations.invoiceId, invoice.id)
-        ));
+      // Keep the original allocation as immutable history. The linked reversal payment
+      // documents the counter-entry; reports should exclude reversed payments from totals.
     }
+
+    // Preserve the advance-credit row as history while cancelling any unapplied balance.
+    await tx.update(subscriberCredits)
+      .set({ remainingAmount: 0, updatedAt: new Date() })
+      .where(eq(subscriberCredits.sourcePaymentId, payment.id));
 
     // Update original payment
     await tx.update(payments)
@@ -513,7 +533,7 @@ export async function listPayments(fastify: FastifyInstance, params: {
   if (filters.receiptNumber) conditions.push(sql`${payments.receiptNumber} ILIKE ${'%' + filters.receiptNumber + '%'}`);
   if (filters.postedBy) conditions.push(eq(payments.postedBy, filters.postedBy));
 
-  const orderColumn = payments[filters.sortBy as keyof typeof payments] || payments.paymentDate;
+  const orderColumn = sortColumn({ paymentDate: payments.paymentDate, receiptNumber: payments.receiptNumber, amount: payments.amount, status: payments.status, createdAt: payments.createdAt }, filters.sortBy, 'paymentDate');
   const orderFn = filters.sortOrder === 'asc' ? asc : desc;
 
   const [items, totalResult] = await Promise.all([
@@ -667,6 +687,7 @@ export async function processGCashVerification(
       referenceNumber: queueItem.referenceNumber,
       paymentDate: queueItem.transactionDate,
       notes: `Verified GCash payment from ${queueItem.senderName} (${queueItem.senderNumber})`,
+      gcashVerified: true,
       proofFile: queueItem.proof ? {
         fileName: queueItem.proof.fileName,
         filePath: queueItem.proof.filePath,

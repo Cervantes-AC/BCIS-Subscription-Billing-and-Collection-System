@@ -1,4 +1,4 @@
-/**
+﻿/**
  * BCIS Database Schema - Operations Tables
  * Suspension, reconnection, receipts, audit logs, settings, backup history
  */

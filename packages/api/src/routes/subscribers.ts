@@ -1,18 +1,21 @@
-/**
+﻿/**
  * Subscriber routes - Fully implemented
  */
 
 import { FastifyInstance } from 'fastify';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { UUIDSchema, PaginationSchema, SubscriberSearchSchema, CreateSubscriberRequestSchema, UpdateSubscriberRequestSchema, SubscriberAddressSchema } from '@bcis/shared';
 import { db } from '../plugins/database';
-import { subscribers, subscriberAddresses, subscriberContacts, serviceAccounts, users, auditLogs } from '@bcis/db/schema';
+import { subscribers, subscriberAddresses, subscriberContacts, serviceAccounts, users, auditLogs, invoices, payments } from '@bcis/db/schema';
 import { eq, and, or, like, ilike, inArray, desc, asc, count, sql } from 'drizzle-orm';
 import { generateSubscriberAccountNumber } from '../utils/numbering';
+import { sortColumn } from '../utils/sort-column';
 
 export async function subscriberRoutes(fastify: FastifyInstance) {
+  const app = fastify.withTypeProvider<ZodTypeProvider>();
   // Search subscribers
-  fastify.get('/subscribers', {
+  app.get('/subscribers', {
     schema: { querystring: SubscriberSearchSchema },
     preHandler: fastify.authorize('subscriber.view'),
   }, async (request, reply) => {
@@ -37,7 +40,7 @@ export async function subscriberRoutes(fastify: FastifyInstance) {
     if (query.collectionAreaId) conditions.push(eq(subscribers.collectionAreaId, query.collectionAreaId));
     if (query.collectorId) conditions.push(eq(subscribers.collectorId, query.collectorId));
 
-    const orderColumn = subscribers[query.sortBy as keyof typeof subscribers] || subscribers.lastName;
+    const orderColumn = sortColumn({ accountNumber: subscribers.accountNumber, firstName: subscribers.firstName, lastName: subscribers.lastName, status: subscribers.status, createdAt: subscribers.createdAt }, query.sortBy, 'lastName');
     const orderFn = query.sortOrder === 'asc' ? asc : desc;
 
     const [items, totalResult] = await Promise.all([
@@ -73,7 +76,7 @@ export async function subscriberRoutes(fastify: FastifyInstance) {
   });
 
   // Get subscriber by ID
-  fastify.get('/subscribers/:id', {
+  app.get('/subscribers/:id', {
     schema: { params: z.object({ id: UUIDSchema }) },
     preHandler: fastify.authorize('subscriber.view'),
   }, async (request, reply) => {
@@ -87,8 +90,7 @@ export async function subscriberRoutes(fastify: FastifyInstance) {
           with: {
             plan: true,
             installationAddress: true,
-            invoices: { orderBy: desc(invoices.generatedAt), limit: 10, with: { items: true } },
-            payments: { orderBy: desc(payments.paymentDate), limit: 10, with: { allocations: { with: { invoice: true } } } },
+            invoices: { orderBy: desc(invoices.generatedAt), limit: 10, with: { items: true, allocations: { with: { payment: true } } } },
           },
         },
       },
@@ -107,21 +109,21 @@ export async function subscriberRoutes(fastify: FastifyInstance) {
           ...sa,
           plan: sa.plan ? { ...sa.plan, monthlyRate: Number(sa.plan.monthlyRate) } : undefined,
           invoices: sa.invoices.map(inv => ({ ...inv, totalAmount: Number(inv.totalAmount), balance: Number(inv.balance) })),
-          payments: sa.payments.map(pmt => ({ ...pmt, amount: Number(pmt.amount) })),
+          payments: [...new Map(sa.invoices.flatMap((invoice) => invoice.allocations.map((allocation) => allocation.payment)).filter(Boolean).map((payment) => [payment.id, payment])).values()].map((payment) => ({ ...payment, amount: Number(payment.amount) })),
         })),
       } 
     };
   });
 
   // Create subscriber
-  fastify.post('/subscribers', {
+  app.post('/subscribers', {
     schema: { body: CreateSubscriberRequestSchema },
     preHandler: fastify.authorize('subscriber.create'),
   }, async (request, reply) => {
     const actorId = request.user.id;
-    const { addresses, ...subscriberData } = request.body;
+    const { addresses, accountNumber: _submittedAccountNumber, ...subscriberData } = request.body;
 
-    const accountNumber = await generateSubscriberAccountNumber();
+    const accountNumber = await generateSubscriberAccountNumber(fastify);
 
     const [newSubscriber] = await db.transaction(async (tx) => {
       const [sub] = await tx.insert(subscribers).values({
@@ -134,6 +136,8 @@ export async function subscriberRoutes(fastify: FastifyInstance) {
       for (const addr of addresses) {
         await tx.insert(subscriberAddresses).values({
           ...addr,
+          latitude: addr.latitude === undefined ? undefined : String(addr.latitude),
+          longitude: addr.longitude === undefined ? undefined : String(addr.longitude),
           subscriberId: sub.id,
         });
       }
@@ -156,7 +160,7 @@ export async function subscriberRoutes(fastify: FastifyInstance) {
   });
 
   // Update subscriber
-  fastify.patch('/subscribers/:id', {
+  app.patch('/subscribers/:id', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: UpdateSubscriberRequestSchema,
@@ -182,7 +186,7 @@ export async function subscriberRoutes(fastify: FastifyInstance) {
         // Delete existing addresses and re-insert
         await tx.delete(subscriberAddresses).where(eq(subscriberAddresses.subscriberId, request.params.id));
         for (const addr of addresses) {
-          await tx.insert(subscriberAddresses).values({ ...addr, subscriberId: request.params.id });
+          await tx.insert(subscriberAddresses).values({ ...addr, latitude: addr.latitude === undefined ? undefined : String(addr.latitude), longitude: addr.longitude === undefined ? undefined : String(addr.longitude), subscriberId: request.params.id });
         }
       }
 
@@ -203,7 +207,7 @@ export async function subscriberRoutes(fastify: FastifyInstance) {
   });
 
   // Global search
-  fastify.get('/search', {
+  app.get('/search', {
     schema: {
       querystring: z.object({
         q: z.string().min(1),

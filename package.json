@@ -18,7 +18,7 @@
     "db:studio": "pnpm --filter @bcis/db run studio",
     "lint": "pnpm --filter @bcis/desktop run lint && pnpm --filter @bcis/api run lint && pnpm --filter @bcis/shared run lint",
     "test": "pnpm --filter @bcis/desktop run test && pnpm --filter @bcis/api run test && pnpm --filter @bcis/shared run test",
-    "test:unit": "pnpm --filter @bcis/shared run test && pnpm --filter @bcis/api run test:unit",
+    "test:unit": "pnpm --filter @bcis/api run test:unit",
     "test:integration": "pnpm --filter @bcis/api run test:integration",
     "test:e2e": "pnpm --filter @bcis/desktop run test:e2e",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",

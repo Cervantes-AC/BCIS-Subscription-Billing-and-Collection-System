@@ -1,20 +1,22 @@
-/**
+﻿/**
  * Admin routes - Fully implemented
  */
 
 import { FastifyInstance } from 'fastify';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { UUIDSchema, PaginationSchema, CreateBackupRequestSchema, RestoreBackupRequestSchema, UpdateSettingRequestSchema } from '@bcis/shared';
 import { db } from '../plugins/database';
 import { applicationSettings, auditLogs, backupHistory, roles, permissions, rolePermissions, users, sessions } from '@bcis/db/schema';
-import { eq, and, or, ilike, inArray, desc, asc, count } from 'drizzle-orm';
+import { eq, and, or, ilike, inArray, desc, asc, count, gte, lte } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 export async function adminRoutes(fastify: FastifyInstance) {
+  const app = fastify.withTypeProvider<ZodTypeProvider>();
   // Settings
-  fastify.get('/settings', {
+  app.get('/settings', {
     schema: { querystring: z.object({ publicOnly: z.boolean().default(false) }) },
     preHandler: fastify.authorize('admin.settings'),
   }, async (request, reply) => {
@@ -28,7 +30,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return { success: true, data: settings };
   });
 
-  fastify.patch('/settings/:key', {
+  app.patch('/settings/:key', {
     schema: {
       params: z.object({ key: z.string() }),
       body: UpdateSettingRequestSchema,
@@ -39,7 +41,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     const existing = await db.query.applicationSettings.findFirst({ where: eq(applicationSettings.key, request.params.key) });
     
     await db.update(applicationSettings)
-      .set({ value: request.body.value, description: request.body.description, updatedBy: actorId, updatedAt: new Date() })
+      .set({ value: request.body.value, description: request.body.description, updatedAt: new Date() })
       .where(eq(applicationSettings.key, request.params.key));
 
     await db.insert(auditLogs).values({
@@ -58,7 +60,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Audit logs
-  fastify.get('/audit-logs', {
+  app.get('/audit-logs', {
     schema: { querystring: PaginationSchema.extend({ actorId: UUIDSchema.optional(), entityType: z.string().optional(), action: z.string().optional(), dateFrom: z.string().datetime().optional(), dateTo: z.string().datetime().optional() }) },
     preHandler: fastify.authorize('admin.audit'),
   }, async (request, reply) => {
@@ -95,7 +97,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Backup
-  fastify.get('/backups', {
+  app.get('/backups', {
     schema: { querystring: PaginationSchema },
     preHandler: fastify.authorize('admin.backup'),
   }, async (request, reply) => {
@@ -123,7 +125,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.post('/backups', {
+  app.post('/backups', {
     schema: { body: CreateBackupRequestSchema },
     preHandler: fastify.authorize('admin.backup'),
   }, async (request, reply) => {
@@ -131,8 +133,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
     const { type = 'manual' } = request.body;
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const fileName = `bcis-backup-${type}-${timestamp}.sql`;
-    const backupDir = path.join(process.cwd(), 'backups');
+    const fileName = `bcis-backup-${type}-${timestamp}.dump`;
+    const backupDir = path.resolve(process.cwd(), 'backups');
     
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true });
@@ -153,7 +155,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     try {
       // Run pg_dump
       const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/bcis_billing';
-      execSync(`pg_dump "${dbUrl}" > "${filePath}"`, { stdio: 'inherit' });
+      execFileSync('pg_dump', ['--format=custom', `--file=${filePath}`, `--dbname=${dbUrl}`], { stdio: 'pipe' });
 
       const stats = fs.statSync(filePath);
       
@@ -186,7 +188,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.post('/backups/:id/restore', {
+  app.post('/backups/:id/restore', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: RestoreBackupRequestSchema,
@@ -206,46 +208,42 @@ export async function adminRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ success: false, error: { code: 'CONFIRMATION_REQUIRED', message: 'Restore requires confirmation', statusCode: 400 } });
     }
 
-    const restoreRecord = await db.insert(backupHistory).values({
-      fileName: `restore-${backup.fileName}`,
-      filePath: backup.filePath,
-      fileSize: backup.fileSize,
-      type: 'restore',
-      status: 'in_progress',
-      createdBy: actorId,
-    }).returning();
+    const backupDir = path.resolve(process.cwd(), 'backups');
+    const backupPath = path.resolve(backup.filePath);
+    if (!backupPath.startsWith(`${backupDir}${path.sep}`) || !fs.existsSync(backupPath) || !fs.statSync(backupPath).isFile()) {
+      return reply.code(400).send({ success: false, error: { code: 'INVALID_BACKUP_PATH', message: 'Backup file is missing or outside the backup directory', statusCode: 400 } });
+    }
 
     try {
       const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/bcis_billing';
-      execSync(`psql "${dbUrl}" < "${backup.filePath}"`, { stdio: 'inherit' });
+      execFileSync('pg_restore', ['--clean', '--if-exists', '--no-owner', '--no-privileges', '--exit-on-error', `--dbname=${dbUrl}`, backupPath], { stdio: 'pipe' });
 
-      await db.update(backupHistory)
-        .set({ status: 'success', completedAt: new Date() })
-        .where(eq(backupHistory.id, restoreRecord[0].id));
+      // A restore replaces the history table too, so write the completion record after pg_restore.
+      const [completedRestore] = await db.insert(backupHistory).values({
+        fileName: `restore-${backup.fileName}`,
+        filePath: backupPath,
+        fileSize: backup.fileSize,
+        type: 'restore',
+        status: 'success',
+        startedAt: new Date(),
+        completedAt: new Date(),
+        createdBy: actorId,
+      }).returning();
 
-      await db.insert(auditLogs).values({
-        actorId,
-        action: 'backup.restore',
-        entityType: 'backup',
-        entityId: restoreRecord[0].id,
-        newValues: { restoredFrom: backup.id, fileName: backup.fileName },
-        reason: 'Database restored from backup',
-        ipAddress: fastify.requestIp,
-        userAgent: fastify.requestHeaders?.['user-agent'],
-      });
+      await db.insert(auditLogs).values({ actorId, action: 'backup.restore', entityType: 'backup', entityId: completedRestore.id,
+        newValues: { restoredFrom: backup.id, fileName: backup.fileName }, reason: 'Database restored from backup',
+        ipAddress: fastify.requestIp, userAgent: fastify.requestHeaders?.['user-agent'] });
 
       return { success: true, data: { message: 'Database restored successfully' } };
     } catch (error) {
-      await db.update(backupHistory)
-        .set({ status: 'failed', errorMessage: error instanceof Error ? error.message : 'Unknown error', completedAt: new Date() })
-        .where(eq(backupHistory.id, restoreRecord[0].id));
+      request.log.error({ err: error, backupId: backup.id }, 'Database restore failed');
       
       return reply.code(500).send({ success: false, error: { code: 'RESTORE_FAILED', message: 'Restore failed', statusCode: 500 } });
     }
   });
 
   // Roles (already in userRoutes, but keeping here for admin namespace)
-  fastify.get('/roles', {
+  app.get('/roles', {
     preHandler: fastify.authorize('admin.role.manage'),
   }, async (request, reply) => {
     const rolesList = await db.query.roles.findMany({
@@ -254,7 +252,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return { success: true, data: rolesList };
   });
 
-  fastify.post('/roles', {
+  app.post('/roles', {
     schema: { body: z.object({ name: z.string().min(1).max(50), description: z.string().max(500).optional(), permissionIds: z.array(UUIDSchema).optional() }) },
     preHandler: fastify.authorize('admin.role.manage'),
   }, async (request, reply) => {
@@ -283,7 +281,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return { success: true, data: role };
   });
 
-  fastify.patch('/roles/:id', {
+  app.patch('/roles/:id', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: z.object({ name: z.string().min(1).max(50).optional(), description: z.string().max(500).optional(), permissionIds: z.array(UUIDSchema).optional() }),
@@ -330,7 +328,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Permissions
-  fastify.get('/permissions', {
+  app.get('/permissions', {
     preHandler: fastify.authorize('admin.role.manage'),
   }, async (request, reply) => {
     const perms = await db.query.permissions.findMany({ orderBy: asc(permissions.module) });
@@ -338,7 +336,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // User Management
-  fastify.get('/users', {
+  app.get('/users', {
     schema: { querystring: PaginationSchema.extend({ roleId: UUIDSchema.optional(), status: z.enum(['active', 'inactive']).optional() }) },
     preHandler: fastify.authorize('admin.user.manage'),
   }, async (request, reply) => {
@@ -371,7 +369,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.get('/users/:id', {
+  app.get('/users/:id', {
     schema: { params: z.object({ id: UUIDSchema }) },
     preHandler: fastify.authorize('admin.user.manage'),
   }, async (request, reply) => {
@@ -385,7 +383,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return { success: true, data: { ...user, passwordHash: undefined } };
   });
 
-  fastify.post('/users', {
+  app.post('/users', {
     schema: { body: z.object({ username: z.string().min(3).max(50), email: z.string().email(), password: z.string().min(8).max(128), fullName: z.string().min(1).max(200), roleId: UUIDSchema, status: z.enum(['active', 'inactive']).default('active') }) },
     preHandler: fastify.authorize('admin.user.manage'),
   }, async (request, reply) => {
@@ -396,7 +394,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
     const [user] = await db.insert(users).values({
       ...request.body,
       passwordHash,
-      createdBy: actorId,
     }).returning();
 
     await db.insert(auditLogs).values({
@@ -413,7 +410,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return { success: true, data: { ...user, passwordHash: undefined } };
   });
 
-  fastify.patch('/users/:id', {
+  app.patch('/users/:id', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: z.object({ email: z.string().email().optional(), fullName: z.string().min(1).max(200).optional(), roleId: UUIDSchema.optional(), status: z.enum(['active', 'inactive']).optional() }),
@@ -427,7 +424,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
 
     await db.update(users)
-      .set({ ...request.body, updatedBy: actorId, updatedAt: new Date() })
+      .set({ ...request.body, updatedAt: new Date() })
       .where(eq(users.id, request.params.id));
 
     await db.insert(auditLogs).values({
@@ -445,7 +442,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return { success: true, data: { message: 'User updated' } };
   });
 
-  fastify.post('/users/:id/reset-password', {
+  app.post('/users/:id/reset-password', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: z.object({ newPassword: z.string().min(8).max(128) }),
@@ -457,7 +454,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     const passwordHash = await bcrypt.hash(request.body.newPassword, 12);
 
     await db.update(users)
-      .set({ passwordHash, passwordChangedAt: new Date(), updatedBy: actorId, updatedAt: new Date() })
+      .set({ passwordHash, passwordChangedAt: new Date(), updatedAt: new Date() })
       .where(eq(users.id, request.params.id));
 
     // Revoke all sessions
@@ -478,7 +475,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return { success: true, data: { message: 'Password reset successfully' } };
   });
 
-  fastify.delete('/users/:id', {
+  app.delete('/users/:id', {
     schema: { params: z.object({ id: UUIDSchema }) },
     preHandler: fastify.authorize('admin.user.manage'),
   }, async (request, reply) => {
@@ -493,7 +490,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
     // Soft delete - set status to inactive
     await db.update(users)
-      .set({ status: 'inactive', updatedBy: actorId, updatedAt: new Date() })
+      .set({ status: 'inactive', updatedAt: new Date() })
       .where(eq(users.id, request.params.id));
 
     // Revoke sessions

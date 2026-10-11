@@ -18,7 +18,7 @@ export const config = {
   jwtRefreshExpiry: process.env.JWT_REFRESH_EXPIRY || '7d',
 
   // CORS
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173,http://127.0.0.1:5173,null',
   corsCredentials: true,
 
   // Rate limiting

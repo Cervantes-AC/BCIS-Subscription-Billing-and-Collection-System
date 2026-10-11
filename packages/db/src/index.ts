@@ -74,8 +74,8 @@ export async function healthCheck(): Promise<boolean> {
   }
 }
 
-type Database = ReturnType<typeof drizzle<typeof schema>>;
-type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+export type Database = ReturnType<typeof drizzle<typeof schema>>;
+export type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 /**
  * Execute in transaction
@@ -109,6 +109,7 @@ export type {
   Adjustment, NewAdjustment,
   Payment, NewPayment,
   PaymentAllocation, NewPaymentAllocation,
+  SubscriberCredit, NewSubscriberCredit,
   PaymentProof, NewPaymentProof,
   PaymentReversal, NewPaymentReversal,
   GCashVerificationQueue, NewGCashVerificationQueue,

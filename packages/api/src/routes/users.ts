@@ -1,18 +1,21 @@
-/**
+﻿/**
  * User management routes - Fully implemented
  */
 
 import { FastifyInstance } from 'fastify';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { UUIDSchema, PaginationSchema } from '@bcis/shared';
 import { db } from '../plugins/database';
 import { users, roles, permissions, rolePermissions, auditLogs, sessions } from '@bcis/db/schema';
 import { eq, and, or, ilike, inArray, desc, asc, count } from 'drizzle-orm';
 import { hashPassword, verifyPassword, validatePasswordStrength } from '../utils/auth';
+import { sortColumn } from '../utils/sort-column';
 
 export async function userRoutes(fastify: FastifyInstance) {
+  const app = fastify.withTypeProvider<ZodTypeProvider>();
   // Get users with pagination
-  fastify.get('/users', {
+  app.get('/users', {
     schema: {
       querystring: PaginationSchema.extend({
         search: z.string().optional(),
@@ -38,7 +41,7 @@ export async function userRoutes(fastify: FastifyInstance) {
     if (query.roleId) conditions.push(eq(users.roleId, query.roleId));
     if (query.status) conditions.push(eq(users.status, query.status as any));
 
-    const orderColumn = users[query.sortBy as keyof typeof users] || users.fullName;
+    const orderColumn = sortColumn({ fullName: users.fullName, username: users.username, email: users.email, status: users.status, createdAt: users.createdAt }, query.sortBy, 'fullName');
     const orderFn = query.sortOrder === 'asc' ? asc : desc;
 
     const [items, totalResult] = await Promise.all([
@@ -69,7 +72,7 @@ export async function userRoutes(fastify: FastifyInstance) {
   });
 
   // Get user by ID
-  fastify.get('/users/:id', {
+  app.get('/users/:id', {
     schema: { params: z.object({ id: UUIDSchema }) },
     preHandler: fastify.authorize('admin.user.manage'),
   }, async (request, reply) => {
@@ -84,7 +87,7 @@ export async function userRoutes(fastify: FastifyInstance) {
   });
 
   // Create user
-  fastify.post('/users', {
+  app.post('/users', {
     schema: {
       body: z.object({
         username: z.string().min(3).max(50),
@@ -122,7 +125,6 @@ export async function userRoutes(fastify: FastifyInstance) {
       fullName,
       roleId,
       status: 'active',
-      createdBy: actorId,
     }).returning();
 
     await db.insert(auditLogs).values({
@@ -140,7 +142,7 @@ export async function userRoutes(fastify: FastifyInstance) {
   });
 
   // Update user
-  fastify.patch('/users/:id', {
+  app.patch('/users/:id', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: z.object({
@@ -159,7 +161,7 @@ export async function userRoutes(fastify: FastifyInstance) {
     }
 
     await db.update(users)
-      .set({ ...request.body, updatedBy: actorId, updatedAt: new Date() })
+      .set({ ...request.body, updatedAt: new Date() })
       .where(eq(users.id, request.params.id));
 
     await db.insert(auditLogs).values({
@@ -178,7 +180,7 @@ export async function userRoutes(fastify: FastifyInstance) {
   });
 
   // Reset user password
-  fastify.post('/users/:id/reset-password', {
+  app.post('/users/:id/reset-password', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: z.object({ newPassword: z.string().min(8).max(128) }),
@@ -201,7 +203,7 @@ export async function userRoutes(fastify: FastifyInstance) {
     const passwordHash = await hashPassword(newPassword);
 
     await db.update(users)
-      .set({ passwordHash, passwordChangedAt: new Date(), updatedBy: actorId, updatedAt: new Date() })
+      .set({ passwordHash, passwordChangedAt: new Date(), updatedAt: new Date() })
       .where(eq(users.id, request.params.id));
 
     // Revoke all sessions
@@ -223,7 +225,7 @@ export async function userRoutes(fastify: FastifyInstance) {
   });
 
   // Delete user (soft delete - set inactive)
-  fastify.delete('/users/:id', {
+  app.delete('/users/:id', {
     schema: { params: z.object({ id: UUIDSchema }) },
     preHandler: fastify.authorize('admin.user.manage'),
   }, async (request, reply) => {
@@ -239,7 +241,7 @@ export async function userRoutes(fastify: FastifyInstance) {
     }
 
     await db.update(users)
-      .set({ status: 'inactive', updatedBy: actorId, updatedAt: new Date() })
+      .set({ status: 'inactive', updatedAt: new Date() })
       .where(eq(users.id, request.params.id));
 
     // Revoke all sessions
@@ -261,42 +263,4 @@ export async function userRoutes(fastify: FastifyInstance) {
     return { success: true, data: { message: 'User deactivated' } };
   });
 
-  // Roles
-  fastify.get('/roles', {
-    preHandler: fastify.authorize('admin.role.manage'),
-  }, async (request, reply) => {
-    const rolesList = await db.query.roles.findMany({
-      with: { rolePermissions: { with: { permission: true } } },
-    });
-    return { success: true, data: rolesList };
-  });
-
-  fastify.post('/roles', {
-    schema: { body: z.object({ name: z.string().min(1).max(50), description: z.string().optional(), permissionIds: z.array(UUIDSchema).optional() }) },
-    preHandler: fastify.authorize('admin.role.manage'),
-  }, async (request, reply) => {
-    const actorId = request.user.id;
-    const { name, description, permissionIds } = request.body;
-
-    const [role] = await db.insert(roles).values({ name, description, isSystem: false }).returning();
-
-    if (permissionIds && permissionIds.length > 0) {
-      await db.insert(rolePermissions).values(
-        permissionIds.map(pid => ({ roleId: role.id, permissionId: pid }))
-      );
-    }
-
-    await db.insert(auditLogs).values({
-      actorId,
-      action: 'role.create',
-      entityType: 'role',
-      entityId: role.id,
-      newValues: { name, description, permissionIds },
-      reason: 'Role created',
-      ipAddress: fastify.requestIp,
-      userAgent: fastify.requestHeaders?.['user-agent'],
-    });
-
-    return { success: true, data: role };
-  });
 }

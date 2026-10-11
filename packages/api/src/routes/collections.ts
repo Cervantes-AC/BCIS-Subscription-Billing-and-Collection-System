@@ -1,27 +1,35 @@
-/**
+﻿/**
  * Collection routes - Fully implemented
  */
 
 import { FastifyInstance } from 'fastify';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { UUIDSchema, PaginationSchema, CreateCollectionAreaRequestSchema, CreateCollectionBatchRequestSchema, CollectionBatchAccountUpdateSchema, CollectorRemittanceRequestSchema, ReconcileBatchRequestSchema } from '@bcis/shared';
-import { 
-  listCollectionAreas, 
-  createCollectionArea, 
+import {
+  listCollectionAreas,
+  listCollectionCollectors,
+  createCollectionArea,
   assignCollector,
-  listCollectionBatches, 
-  getCollectionBatch, 
-  createCollectionBatch, 
-  recordCollection, 
-  submitRemittance, 
-  reconcileBatch, 
+  listCollectionBatches,
+  getCollectionBatch,
+  createCollectionBatch,
+  recordCollection,
+  submitRemittance,
+  reconcileBatch,
   closeBatch,
   getRouteSheet,
 } from '../services/collections';
+import { requestContext } from '../utils/request-context';
 
 export async function collectionRoutes(fastify: FastifyInstance) {
+  const app = fastify.withTypeProvider<ZodTypeProvider>();
+  app.get('/collection-collectors', {
+    preHandler: fastify.authorize('collection.view'),
+  }, async () => ({ success: true, data: await listCollectionCollectors(fastify) }));
+
   // Areas
-  fastify.get('/collection-areas', {
+  app.get('/collection-areas', {
     schema: { querystring: PaginationSchema },
     preHandler: fastify.authorize('collection.view'),
   }, async (request, reply) => {
@@ -30,34 +38,34 @@ export async function collectionRoutes(fastify: FastifyInstance) {
       page: query.page || 1,
       limit: query.limit || 20,
       isActive: query.isActive,
-    });
+    }, fastify);
     return { success: true, data: result };
   });
 
-  fastify.post('/collection-areas', {
+  app.post('/collection-areas', {
     schema: { body: CreateCollectionAreaRequestSchema },
     preHandler: fastify.authorize('collection.create'),
   }, async (request, reply) => {
-    const area = await createCollectionArea(fastify, request.body);
+    const area = await createCollectionArea(requestContext(fastify, request), request.body);
     return { success: true, data: area };
   });
 
-  fastify.post('/collection-areas/:areaId/assign-collector', {
-    schema: { 
+  app.post('/collection-areas/:areaId/assign-collector', {
+    schema: {
       params: z.object({ areaId: UUIDSchema }),
       body: z.object({ collectorId: UUIDSchema }),
     },
     preHandler: fastify.authorize('collection.create'),
   }, async (request, reply) => {
-    const assignment = await assignCollector(fastify, { 
-      areaId: request.params.areaId, 
-      collectorId: request.body.collectorId 
+    const assignment = await assignCollector(requestContext(fastify, request), {
+      areaId: request.params.areaId,
+      collectorId: request.body.collectorId
     });
     return { success: true, data: assignment };
   });
 
   // Batches
-  fastify.get('/collection-batches', {
+  app.get('/collection-batches', {
     schema: { querystring: PaginationSchema.extend({ status: z.enum(['open', 'in_progress', 'submitted', 'remitted', 'reconciled', 'closed']).optional(), collectorId: UUIDSchema.optional(), areaId: UUIDSchema.optional() }) },
     preHandler: fastify.authorize('collection.view'),
   }, async (request, reply) => {
@@ -72,30 +80,30 @@ export async function collectionRoutes(fastify: FastifyInstance) {
       collectionDateTo: query.collectionDateTo ? new Date(query.collectionDateTo) : undefined,
       sortBy: query.sortBy,
       sortOrder: query.sortOrder,
-    });
+    }, fastify);
     return { success: true, data: result };
   });
 
-  fastify.get('/collection-batches/:id', {
+  app.get('/collection-batches/:id', {
     schema: { params: z.object({ id: UUIDSchema }) },
     preHandler: fastify.authorize('collection.view'),
   }, async (request, reply) => {
-    const batch = await getCollectionBatch(request.params.id);
+    const batch = await getCollectionBatch(fastify, request.params.id);
     if (!batch) {
       return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Batch not found', statusCode: 404 } });
     }
     return { success: true, data: batch };
   });
 
-  fastify.post('/collection-batches', {
+  app.post('/collection-batches', {
     schema: { body: CreateCollectionBatchRequestSchema },
     preHandler: fastify.authorize('collection.create'),
   }, async (request, reply) => {
-    const batch = await createCollectionBatch(fastify, request.body);
+    const batch = await createCollectionBatch(requestContext(fastify, request), { ...request.body, collectionDate: new Date(request.body.collectionDate) });
     return { success: true, data: batch };
   });
 
-  fastify.patch('/collection-batches/:id', {
+  app.patch('/collection-batches/:id', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: z.object({ status: z.enum(['open', 'in_progress', 'submitted', 'remitted', 'reconciled', 'closed']).optional(), notes: z.string().max(1000).optional() }),
@@ -106,14 +114,14 @@ export async function collectionRoutes(fastify: FastifyInstance) {
     return { success: true, data: { message: 'Use specific endpoints for status changes' } };
   });
 
-  fastify.patch('/collection-batches/:id/accounts/:accountId', {
+  app.patch('/collection-batches/:id/accounts/:accountId', {
     schema: {
       params: z.object({ id: UUIDSchema, accountId: UUIDSchema }),
       body: CollectionBatchAccountUpdateSchema,
     },
     preHandler: fastify.authorize('collection.record'),
   }, async (request, reply) => {
-    await recordCollection(fastify, {
+    await recordCollection(requestContext(fastify, request), {
       batchId: request.params.id,
       serviceAccountId: request.params.accountId,
       collectedAmount: request.body.collectedAmount,
@@ -126,14 +134,14 @@ export async function collectionRoutes(fastify: FastifyInstance) {
     return { success: true, data: { message: 'Collection recorded' } };
   });
 
-  fastify.post('/collection-batches/:id/remit', {
+  app.post('/collection-batches/:id/remit', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: CollectorRemittanceRequestSchema,
     },
     preHandler: fastify.authorize('collection.remit'),
   }, async (request, reply) => {
-    const result = await submitRemittance(fastify, {
+    const result = await submitRemittance(requestContext(fastify, request), {
       batchId: request.params.id,
       cashAmount: request.body.cashAmount,
       nonCashAmount: request.body.nonCashAmount,
@@ -143,14 +151,14 @@ export async function collectionRoutes(fastify: FastifyInstance) {
     return { success: true, data: result };
   });
 
-  fastify.post('/collection-batches/:id/reconcile', {
+  app.post('/collection-batches/:id/reconcile', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: ReconcileBatchRequestSchema,
     },
     preHandler: fastify.authorize('collection.reconcile'),
   }, async (request, reply) => {
-    const result = await reconcileBatch(fastify, request.params.id, {
+    const result = await reconcileBatch(requestContext(fastify, request), request.params.id, {
       actualCash: request.body.actualCash,
       actualNonCash: request.body.actualNonCash,
       notes: request.body.notes,
@@ -158,20 +166,20 @@ export async function collectionRoutes(fastify: FastifyInstance) {
     return { success: true, data: result };
   });
 
-  fastify.post('/collection-batches/:id/close', {
+  app.post('/collection-batches/:id/close', {
     schema: { params: z.object({ id: UUIDSchema }) },
     preHandler: fastify.authorize('collection.reconcile'),
   }, async (request, reply) => {
-    await closeBatch(fastify, request.params.id);
+    await closeBatch(requestContext(fastify, request), request.params.id);
     return { success: true, data: { message: 'Batch closed' } };
   });
 
-  // Route sheet
-  fastify.get('/collection-batches/:id/route-sheet', {
+  // Route shee
+  app.get('/collection-batches/:id/route-sheet', {
     schema: { params: z.object({ id: UUIDSchema }) },
     preHandler: fastify.authorize('collection.view'),
   }, async (request, reply) => {
-    const routeSheet = await getRouteSheet(request.params.id);
+    const routeSheet = await getRouteSheet(requestContext(fastify, request), request.params.id);
     return { success: true, data: routeSheet };
   });
 }

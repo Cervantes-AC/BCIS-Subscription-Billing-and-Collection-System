@@ -98,22 +98,12 @@ export function ReceivablesPage() {
   });
 
   const getAgingBucketTotal = (bucket: string) => {
-    if (!agingData?.details) return 0;
-    return agingData.details.reduce((sum: number, acc: OverdueAccount) => {
+    const details = (agingData as any)?.details as OverdueAccount[] | undefined;
+    if (!details) return 0;
+    return details.reduce((sum: number, acc: OverdueAccount) => {
       const b = acc.agingBuckets.find((x: any) => x.bucket === bucket);
       return sum + (b?.amount || 0);
     }, 0);
-  };
-
-  const formatAgingLabel = (bucket: string) => {
-    const labels: Record<string, string> = {
-      current: 'Current',
-      '1-30': '1-30 Days',
-      '31-60': '31-60 Days',
-      '61-90': '61-90 Days',
-      '90+': '90+ Days',
-    };
-    return labels[bucket] || bucket;
   };
 
   return (
@@ -198,14 +188,14 @@ export function ReceivablesPage() {
         <OverdueAccountsView 
           data={overdueData} 
           onSelect={setSelectedAccount}
-          onSuspend={(account) => { setSelectedAccount(account); setShowSuspendModal(true); }}
+          onSuspend={(account: OverdueAccount) => { setSelectedAccount(account); setShowSuspendModal(true); }}
         />
       )}
 
       {activeTab === 'suspension' && (
         <SuspensionCandidatesView 
           data={suspensionData}
-          onSuspend={(account) => { setSelectedAccount(account); setShowSuspendModal(true); }}
+          onSuspend={(account: OverdueAccount) => { setSelectedAccount(account); setShowSuspendModal(true); }}
         />
       )}
 
@@ -219,6 +209,11 @@ export function ReceivablesPage() {
       )}
     </section>
   );
+}
+
+function formatAgingLabel(bucket: string) {
+  const labels: Record<string, string> = { current: 'Current', '1-30': '1-30 Days', '31-60': '31-60 Days', '61-90': '61-90 Days', '90+': '90+ Days' };
+  return labels[bucket] || bucket;
 }
 
 function ARAgingView({ data }: any) {

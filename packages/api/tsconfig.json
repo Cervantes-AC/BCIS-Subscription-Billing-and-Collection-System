@@ -10,6 +10,10 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "paths": {
+      "@bcis/shared/*": ["packages/shared/dist/*"],
+      "@bcis/db/*": ["packages/db/dist/*"]
+    },
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true

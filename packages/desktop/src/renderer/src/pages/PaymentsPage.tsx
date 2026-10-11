@@ -35,6 +35,12 @@ export function PaymentsPage({ onNavigate }: PaymentPageProps) {
     enabled: !!selectedSubscriber && previewAmount > 0,
   });
 
+  const { data: creditBalance } = useQuery({
+    queryKey: ['subscriber-credit', selectedSubscriber?.id],
+    queryFn: () => api.getSubscriberCreditBalance(selectedSubscriber!.id),
+    enabled: !!selectedSubscriber,
+  });
+
   // Submit payment mutation
   const submitPaymentMutation = useMutation({
     mutationFn: (data: any) => api.createPayment(data),
@@ -145,6 +151,7 @@ export function PaymentsPage({ onNavigate }: PaymentPageProps) {
                     <span className="font-semibold">{formatCurrency(selectedSubscriber.totalArrears || 0)}</span>
                     <span className="text-xs text-text-muted">Total Due</span>
                   </div>
+                  <p className="mt-2 text-sm text-text-muted">Advance credit: <strong className="text-text-primary">{formatCurrency((creditBalance as any)?.data?.balance ?? 0)}</strong></p>
                 </div>
               )}
             </div>
@@ -156,7 +163,7 @@ export function PaymentsPage({ onNavigate }: PaymentPageProps) {
               <>
                 <PaymentForm
                   subscriber={selectedSubscriber}
-                  allocationPreview={allocationPreview?.items || []}
+                  allocationPreview={(allocationPreview as any)?.data || (allocationPreview as any)?.items || []}
                   previewAmount={previewAmount}
                   onPreviewAmountChange={setPreviewAmount}
                   onSubmit={handlePaymentSubmit}
@@ -167,11 +174,11 @@ export function PaymentsPage({ onNavigate }: PaymentPageProps) {
                 {previewAmount > 0 && allocationPreview && (
                   <div className="bg-surface rounded-lg p-4">
                     <h3 className="font-semibold text-text-primary mb-4">Allocation Preview (Oldest First)</h3>
-                    <AllocationPreview items={allocationPreview.items} />
+                    <AllocationPreview items={(allocationPreview as any)?.data || (allocationPreview as any)?.items || []} />
                     <div className="mt-4 p-3 bg-blue-50 rounded-lg">
                       <p className="text-sm text-blue-800">
                         Total Payment: <strong>{formatCurrency(previewAmount)}</strong>
-                        {allocationPreview.items.some(i => i.invoiceId === '') && (
+                        {((allocationPreview as any)?.data || (allocationPreview as any)?.items || []).some((i: any) => i.invoiceId === '') && (
                           <span className="ml-2">Includes advance payment</span>
                         )}
                       </p>
@@ -247,6 +254,7 @@ interface SubscriberSearchResult {
   firstName: string;
   lastName: string;
   contactNumber: string;
+  status: string;
   totalArrears?: number;
   serviceAccounts?: any[];
 }

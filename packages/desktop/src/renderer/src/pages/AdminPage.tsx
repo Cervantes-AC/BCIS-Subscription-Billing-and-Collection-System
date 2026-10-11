@@ -7,7 +7,7 @@ import {
   Plus, Search, Edit, Trash2, Loader2, AlertCircle, 
   CheckCircle, XCircle, Download, Upload, RefreshCw,
   Shield, Key, Settings, Database, History, Users,
-  UserPlus, UserMinus, Eye, Save, Cancel, Filter,
+  UserPlus, UserMinus, Eye, Save, X, Filter,
   ChevronDown, ChevronUp, MoreHorizontal, Bell,
   Zap, ShieldCheck, Lock, Unlock, LogOut
 } from 'lucide-react';
@@ -239,8 +239,8 @@ export function AdminPage() {
               onSearchChange={setSearchQuery}
               onCreate={() => { setSelectedUser(null); setShowCreateUserModal(true); }}
               onEdit={setSelectedUser}
-              onDelete={(id) => deleteUserMutation.mutate(id)}
-              onResetPassword={(user) => { setSelectedUser(user); setShowResetPasswordModal(true); }}
+              onDelete={(id: string) => deleteUserMutation.mutate(id)}
+              onResetPassword={(user: User) => { setSelectedUser(user); setShowResetPasswordModal(true); }}
               createMutation={createUserMutation}
               updateMutation={updateUserMutation}
               resetPasswordMutation={resetPasswordMutation}
@@ -251,6 +251,10 @@ export function AdminPage() {
               onCloseCreate={() => setShowCreateUserModal(false)}
               onCloseEdit={() => { setShowEditUserModal(false); setSelectedUser(null); }}
               onCloseResetPassword={() => { setShowResetPasswordModal(false); setSelectedUser(null); }}
+              selectedUser={selectedUser}
+              setShowEditUserModal={setShowEditUserModal}
+              setShowResetPasswordModal={setShowResetPasswordModal}
+              getStatusBadge={getStatusBadge}
             />
           )}
 
@@ -268,6 +272,10 @@ export function AdminPage() {
               showEditModal={showEditRoleModal}
               onCloseCreate={() => setShowCreateRoleModal(false)}
               onCloseEdit={() => { setShowEditRoleModal(false); setSelectedRole(null); }}
+              selectedRole={selectedRole}
+              setSelectedRole={setSelectedRole}
+              setShowEditRoleModal={setShowEditRoleModal}
+              setShowCreateRoleModal={setShowCreateRoleModal}
             />
           )}
 
@@ -295,6 +303,9 @@ export function AdminPage() {
               backupType={backupType}
               setBackupType={setBackupType}
               refetch={refetchBackup}
+              setShowBackupModal={setShowBackupModal}
+              formatFileSize={formatFileSize}
+              getStatusBadge={getStatusBadge}
             />
           )}
 
@@ -321,7 +332,7 @@ function UsersTab({
   users, roles, isLoading, searchQuery, onSearchChange, onCreate, onEdit, onDelete, onResetPassword,
   createMutation, updateMutation, resetPasswordMutation, isDeleting,
   showCreateModal, showEditModal, showResetPasswordModal,
-  onCloseCreate, onCloseEdit, onCloseResetPassword
+  onCloseCreate, onCloseEdit, onCloseResetPassword, selectedUser, setShowEditUserModal, setShowResetPasswordModal, getStatusBadge
 }: any) {
   const [formData, setFormData] = useState({
     username: '', email: '', password: '', fullName: '', roleId: '', status: 'active'
@@ -428,7 +439,7 @@ function UsersTab({
           <div className="bg-surface rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-surface z-10">
               <h3 className="text-lg font-semibold">{showCreateModal ? 'Create User' : 'Edit User'}</h3>
-              <button onClick={onCloseCreate} className="p-2 hover:bg-gray-100 rounded-lg">✕</button>
+              <button onClick={onCloseCreate} className="p-2 hover:bg-gray-100 rounded-lg">âœ•</button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
@@ -501,7 +512,7 @@ function UsersTab({
 // ============================================
 // Roles Tab Component
 // ============================================
-function RolesTab({ roles, permissions, isLoading, onCreate, onEdit, createMutation, updateMutation, showCreateModal, showEditModal, onCloseCreate, onCloseEdit }: any) {
+function RolesTab({ roles, permissions, isLoading, onCreate, onEdit, createMutation, updateMutation, showCreateModal, showEditModal, onCloseCreate, onCloseEdit, selectedRole, setSelectedRole, setShowEditRoleModal, setShowCreateRoleModal }: any) {
   const [formData, setFormData] = useState({ name: '', description: '', permissionIds: [] as string[] });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -521,7 +532,7 @@ function RolesTab({ roles, permissions, isLoading, onCreate, onEdit, createMutat
   };
 
   // Group permissions by module
-  const permissionsByModule = permissions.reduce((acc: any, p: Permission) => {
+  const permissionsByModule: Record<string, Permission[]> = permissions.reduce((acc: Record<string, Permission[]>, p: Permission) => {
     if (!acc[p.module]) acc[p.module] = [];
     acc[p.module].push(p);
     return acc;
@@ -586,7 +597,7 @@ function RolesTab({ roles, permissions, isLoading, onCreate, onEdit, createMutat
           <div className="bg-surface rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-surface z-10">
               <h3 className="text-lg font-semibold">{showCreateModal ? 'Create Role' : 'Edit Role'}</h3>
-              <button onClick={onCloseCreate} className="p-2 hover:bg-gray-100 rounded-lg">✕</button>
+              <button onClick={onCloseCreate} className="p-2 hover:bg-gray-100 rounded-lg">âœ•</button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -696,7 +707,7 @@ function SettingsTab({ settings, isLoading, updateMutation }: any) {
 // ============================================
 // Backup Tab Component
 // ============================================
-function BackupTab({ backups, isLoading, onCreate, onRestore, createMutation, isCreating, isRestoring, showModal, onCloseModal, backupType, setBackupType, refetch }: any) {
+function BackupTab({ backups, isLoading, onCreate, onRestore, createMutation, isCreating, isRestoring, showModal, onCloseModal, backupType, setBackupType, refetch, setShowBackupModal, formatFileSize, getStatusBadge }: any) {
   if (isLoading) return <div className="p-8 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto text-primary mb-2" /><p className="text-text-muted">Loading backups...</p></div>;
 
   const handleCreateBackup = async (e: React.FormEvent) => {

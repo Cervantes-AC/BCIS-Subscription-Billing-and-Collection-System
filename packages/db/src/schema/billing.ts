@@ -1,4 +1,4 @@
-/**
+﻿/**
  * BCIS Database Schema - Billing Tables
  * Billing cycles, invoices, invoice items, adjustments
  */

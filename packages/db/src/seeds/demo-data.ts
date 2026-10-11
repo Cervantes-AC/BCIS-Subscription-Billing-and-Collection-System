@@ -1,11 +1,11 @@
-/**
+﻿/**
  * BCIS Database Demo Seed Data
  * Seeds comprehensive demo data for testing and demonstration
  * Run AFTER the basic seed (which creates roles, permissions, users, plans, areas)
  */
 
 import { getDb, closeDb, transaction } from '../index';
-import * as schema from '../schema';
+import * as schema from '@bcis/db/schema';
 import { eq, and, inArray, desc } from 'drizzle-orm';
 import { subDays, addDays, addMonths, startOfMonth, endOfMonth, format } from 'date-fns';
 
@@ -23,8 +23,9 @@ async function seedDemoData() {
       
       const plans = await tx.query.servicePlans.findMany();
       const areas = await tx.query.collectionAreas.findMany();
+      const supervisorRole = await tx.query.roles.findFirst({ where: eq(schema.roles.name, 'collection_supervisor') });
       const collectors = await tx.query.users.findMany({
-        where: (users, { eq }) => eq(users.roleId, (await tx.query.roles.findFirst({ where: eq(schema.roles.name, 'collection_supervisor') }))?.id || ''),
+        where: eq(schema.users.roleId, supervisorRole?.id || ''),
       });
       const adminUser = await tx.query.users.findFirst({ where: eq(schema.users.username, 'admin') });
       
@@ -61,7 +62,7 @@ async function seedDemoData() {
       console.log('Creating 50 subscribers...');
       
       const barangays = ['Poblacion', 'San Jose', 'Santa Cruz', 'Mabuhay', 'Kalayaan', 'Bagong Silang', 'Maharlika', 'Rizal', 'Quezon', 'Aquino'];
-      const streets = ['Rizal St.', 'Quezon Ave.', 'Magsaysay Blvd.', 'Osmeña St.', 'Roxas Ave.', 'Garcia St.', 'Laurel St.', 'Quirino Ave.', 'Marcos Highway', 'Aguinaldo St.'];
+      const streets = ['Rizal St.', 'Quezon Ave.', 'Magsaysay Blvd.', 'OsmeÃ±a St.', 'Roxas Ave.', 'Garcia St.', 'Laurel St.', 'Quirino Ave.', 'Marcos Highway', 'Aguinaldo St.'];
       const cities = ['Malaybalay', 'Valencia', 'Manolo Fortich', 'Libona', 'Impasug-ong', 'Sumilao', 'Baungon', 'Talakag', 'Lantapan', 'Cabanglasan'];
       
       const firstNames = ['Juan', 'Maria', 'Jose', 'Ana', 'Pedro', 'Carmen', 'Luis', 'Rosa', 'Carlos', 'Teresa', 'Miguel', 'Luz', 'Ramon', 'Gloria', 'Fernando', 'Dolores', 'Ricardo', 'Concepcion', 'Antonio', 'Esperanza'];
@@ -113,8 +114,8 @@ async function seedDemoData() {
             province: 'Bukidnon',
             zipCode: '8700',
             isPrimary: a === 0,
-            latitude: 8.15 + Math.random() * 0.5,
-            longitude: 125.1 + Math.random() * 0.5,
+            latitude: (8.15 + Math.random() * 0.5).toFixed(8),
+            longitude: (125.1 + Math.random() * 0.5).toFixed(8),
           });
         }
       }
@@ -157,8 +158,8 @@ async function seedDemoData() {
           planId: plan.id,
           installationAddressId: primaryAddr.id,
           status: status as any,
-          activationDate,
-          billingStartDate,
+          activationDate: format(activationDate, 'yyyy-MM-dd'),
+          billingStartDate: format(billingStartDate, 'yyyy-MM-dd'),
           billingDay: sub.billingDay,
           currentRate: plan.monthlyRate,
           collectorId: sub.collectorId || collectors[Math.floor(Math.random() * collectors.length)]?.id || null,
@@ -220,6 +221,8 @@ async function seedDemoData() {
 
       for (const cycle of billingCyclesData) {
         for (const sa of activeServiceAccounts) {
+          const plan = plans.find((candidate) => candidate.id === sa.planId);
+          if (!plan) throw new Error(`Plan ${sa.planId} not found for service account ${sa.accountNumber}`);
           // Check if invoice already exists
           const existingInvoice = await tx.query.invoices.findFirst({
             where: and(
@@ -231,7 +234,7 @@ async function seedDemoData() {
           if (existingInvoice) continue;
 
           const isFirstBilling = sa.activationDate <= cycle.periodEnd && sa.billingStartDate >= cycle.periodStart;
-          const subscriptionCharge = sa.currentRate || sa.plan?.monthlyRate || planMap.get('NET-BASIC')?.monthlyRate || 99900;
+          const subscriptionCharge = sa.currentRate || plan.monthlyRate || planMap.get('NET-BASIC')?.monthlyRate || 99900;
           const installationFee = isFirstBilling ? plan.installationFee : 0;
           const reconnectionFee = 0;
           const penalty = 0;
@@ -277,7 +280,7 @@ async function seedDemoData() {
               quantity: 1,
               unitPrice: installationFee,
               amount: installationFee,
-              type: 'installation',
+              type: 'installation' as const,
               sortOrder: 2,
             }] : []),
           ]);
@@ -570,7 +573,7 @@ async function seedDemoData() {
           )
         ),
         limit: 5,
-        with: { subscriber: true },
+        with: { subscriber: true, plan: true },
       });
 
       for (let i = 0; i < Math.min(2, overdueSAs.length); i++) {
@@ -581,7 +584,7 @@ async function seedDemoData() {
         const [suspension] = await tx.insert(schema.suspensionRecords).values({
           serviceAccountId: sa.id,
           reason: 'non_payment',
-          effectiveDate: suspensionDate,
+          effectiveDate: format(suspensionDate, 'yyyy-MM-dd'),
           approvedBy: adminUser.id,
           notes: `Suspended for non-payment - ${sa.subscriber.accountNumber}`,
         }).returning();
@@ -695,7 +698,7 @@ async function seedDemoData() {
             collectorId: collector1.id,
             areaId: areas[0].id,
             status: 'reconciled',
-            collectionDate: batchDate,
+            collectionDate: format(batchDate, 'yyyy-MM-dd'),
             expectedCash: 5000000, // 50,000 PHP in centavos
             expectedNonCash: 1000000, // 10,000 PHP
             actualCash: 4950000,
@@ -749,7 +752,7 @@ async function seedDemoData() {
             collectorId: collector1.id,
             cashAmount: 4950000,
             nonCashAmount: 1000000,
-            remittanceDate: batchDate,
+            remittanceDate: format(batchDate, 'yyyy-MM-dd'),
             remittedBy: collector1.id,
             receivedBy: adminUser.id,
             notes: 'Remitted to office',
@@ -771,7 +774,6 @@ async function seedDemoData() {
         
         // Create proof attachment first
         const [proof] = await tx.insert(schema.paymentProofs).values({
-          paymentId: '00000000-0000-0000-0000-000000000000', // placeholder
           fileName: `gcash_proof_${refNumber}.jpg`,
           filePath: `/uploads/gcash/${refNumber}.jpg`,
           fileSize: Math.floor(100000 + Math.random() * 500000),
@@ -807,7 +809,7 @@ async function seedDemoData() {
 }
 
 // Run when invoked as the seed script
-if (process.argv[1]?.endsWith('run.ts') || process.argv[1]?.endsWith('run.js')) {
+if (process.argv[1]?.endsWith('run.ts') || process.argv[1]?.endsWith('run.js') || process.argv[1]?.endsWith('demo-data.ts') || process.argv[1]?.endsWith('demo-data.js')) {
   seedDemoData()
     .then(() => process.exit(0))
     .catch(() => process.exit(1));

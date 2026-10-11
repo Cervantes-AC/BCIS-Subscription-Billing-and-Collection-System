@@ -18,6 +18,7 @@ import {
 import { eq, and, or, gte, lte, isNull, not, inArray, sql, desc, asc, sum, count } from 'drizzle-orm';
 import { generateBatchNumber } from '../utils/numbering';
 import type { FastifyInstance } from 'fastify';
+import { sortColumn } from '../utils/sort-column';
 
 export interface RouteSheetItem {
   serviceAccountId: string;
@@ -137,7 +138,7 @@ export async function createCollectionBatch(
       collectorId: data.collectorId,
       areaId: data.areaId,
       status: 'open',
-      collectionDate: data.collectionDate,
+      collectionDate: data.collectionDate.toISOString().slice(0, 10),
       expectedCash,
       expectedNonCash: 0,
       actualCash: 0,
@@ -247,9 +248,9 @@ export async function getCollectionBatch(fastify: FastifyInstance, batchId: stri
       arrears: Number(acc.arrears),
       totalDue: Number(acc.totalDue),
       collectedAmount: Number(acc.collectedAmount),
-      collectedMethod: acc.collectedMethod,
-      collectedAt: acc.collectedAt,
-      receiptNumber: acc.receiptNumber,
+      collectedMethod: acc.collectedMethod ?? undefined,
+      collectedAt: acc.collectedAt ?? undefined,
+      receiptNumber: acc.receiptNumber ?? undefined,
       status,
     };
   });
@@ -266,7 +267,7 @@ export async function getCollectionBatch(fastify: FastifyInstance, batchId: stri
     areaId: batch.areaId,
     areaName: batch.area?.name || '',
     status: batch.status,
-    collectionDate: batch.collectionDate,
+    collectionDate: new Date(batch.collectionDate),
     expectedCash: Number(batch.expectedCash),
     expectedNonCash: Number(batch.expectedNonCash),
     actualCash: Number(batch.actualCash),
@@ -402,7 +403,7 @@ export async function submitRemittance(
       collectorId: batch.collectorId,
       cashAmount: data.cashAmount,
       nonCashAmount: data.nonCashAmount,
-      remittanceDate: data.remittanceDate,
+      remittanceDate: data.remittanceDate.toISOString().slice(0, 10),
       remittedBy: actorId,
       notes: data.notes,
     });
@@ -610,10 +611,10 @@ export async function listCollectionBatches(params: {
   if (filters.collectorId) conditions.push(eq(collectionBatches.collectorId, filters.collectorId));
   if (filters.areaId) conditions.push(eq(collectionBatches.areaId, filters.areaId));
   if (filters.status) conditions.push(eq(collectionBatches.status, filters.status as any));
-  if (filters.collectionDateFrom) conditions.push(gte(collectionBatches.collectionDate, filters.collectionDateFrom.toISOString().split('T')[0]));
-  if (filters.collectionDateTo) conditions.push(lte(collectionBatches.collectionDate, filters.collectionDateTo.toISOString().split('T')[0]));
+  if (filters.collectionDateFrom) conditions.push(gte(collectionBatches.collectionDate, filters.collectionDateFrom.toISOString().slice(0, 10)));
+  if (filters.collectionDateTo) conditions.push(lte(collectionBatches.collectionDate, filters.collectionDateTo.toISOString().slice(0, 10)));
 
-  const orderColumn = collectionBatches[filters.sortBy as keyof typeof collectionBatches] || collectionBatches.collectionDate;
+  const orderColumn = sortColumn({ collectionDate: collectionBatches.collectionDate, batchNumber: collectionBatches.batchNumber, status: collectionBatches.status, createdAt: collectionBatches.createdAt }, filters.sortBy, 'collectionDate');
   const orderFn = filters.sortOrder === 'asc' ? asc : desc;
 
   const [items, totalResult] = await Promise.all([
@@ -755,4 +756,17 @@ export async function assignCollector(
   });
 
   return assignment;
+}
+
+/** Return active users eligible for collection route assignment. */
+export async function listCollectionCollectors(fastify: FastifyInstance) {
+  const activeUsers = await fastify.db.query.users.findMany({
+    where: eq(users.status, 'active'),
+    with: { role: true },
+    orderBy: asc(users.fullName),
+  });
+  const items = activeUsers
+    .filter((user) => user.role?.name === 'collection_supervisor' || user.role?.name === 'collector')
+    .map(({ passwordHash: _passwordHash, ...user }) => user);
+  return { items, meta: { total: items.length } };
 }

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * BCIS Database Schema - Main Export
  * Exports all schema tables and relations
  */

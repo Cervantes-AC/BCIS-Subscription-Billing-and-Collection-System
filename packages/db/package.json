@@ -42,6 +42,7 @@
   "dependencies": {
     "@bcis/shared": "workspace:*",
     "bcryptjs": "^2.4.3",
+    "date-fns": "^3.6.0",
     "dotenv": "^18.0.6",
     "drizzle-orm": "^0.32.0",
     "pg": "^8.12.0",

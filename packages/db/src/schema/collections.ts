@@ -1,4 +1,4 @@
-/**
+﻿/**
  * BCIS Database Schema - Collections Tables
  * Collection areas, collectors, batches, remittances
  */

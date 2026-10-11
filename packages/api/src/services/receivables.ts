@@ -223,12 +223,12 @@ export async function calculateAging(
     
     // Find oldest unpaid invoice
     const oldestInvoice = saInvoices.reduce((oldest, inv) => 
-      inv.dueDate < oldest.dueDate ? inv : oldest
+      new Date(inv.dueDate) < new Date(oldest.dueDate) ? inv : oldest
     );
 
     // Calculate months unpaid
     const monthsUnpaid = Math.ceil(
-      (asOfDate.getTime() - oldestInvoice.dueDate.getTime()) / (1000 * 60 * 60 * 24 * 30)
+      (asOfDate.getTime() - new Date(oldestInvoice.dueDate).getTime()) / (1000 * 60 * 60 * 24 * 30)
     );
 
     // Calculate aging buckets for this service account's invoices
@@ -242,7 +242,7 @@ export async function calculateAging(
 
     for (const inv of saInvoices) {
       const balance = Number(inv.balance);
-      const daysOverdue = Math.floor((asOfDate.getTime() - inv.dueDate.getTime()) / (1000 * 60 * 60 * 24));
+      const daysOverdue = Math.floor((asOfDate.getTime() - new Date(inv.dueDate).getTime()) / (1000 * 60 * 60 * 24));
       
       let bucketIndex = 0;
       if (daysOverdue <= 0) bucketIndex = 0; // Current
@@ -262,10 +262,10 @@ export async function calculateAging(
     
     // Current bill = invoices not yet overdue (due date >= asOfDate)
     const currentBill = saInvoices
-      .filter(inv => inv.dueDate >= asOfDate)
+      .filter(inv => new Date(inv.dueDate) >= asOfDate)
       .reduce((sum, inv) => sum + Number(inv.balance), 0);
 
-    const isOverdue = totalArrears > currentBill || saInvoices.some(inv => inv.dueDate < asOfDate);
+    const isOverdue = totalArrears > currentBill || saInvoices.some(inv => new Date(inv.dueDate) < asOfDate);
     if (isOverdue) overdueCount++;
 
     totalReceivable += totalArrears;
@@ -295,7 +295,7 @@ export async function calculateAging(
           type: sa.plan.type,
         },
         status: sa.status,
-        collectorId: sa.collectorId,
+        collectorId: sa.collectorId ?? undefined,
       },
       collector: sa.collector ? { id: sa.collector.id, fullName: sa.collector.fullName } : undefined,
       area: sa.subscriber.collectionAreaId ? { id: sa.subscriber.collectionAreaId, name: '' } : undefined,
@@ -303,7 +303,7 @@ export async function calculateAging(
       oldestUnpaidInvoice: oldestInvoice ? {
         id: oldestInvoice.id,
         invoiceNumber: oldestInvoice.invoiceNumber,
-        dueDate: oldestInvoice.dueDate,
+        dueDate: new Date(oldestInvoice.dueDate),
         balance: Number(oldestInvoice.balance),
       } : null,
       lastPayment: lastPayment ? {

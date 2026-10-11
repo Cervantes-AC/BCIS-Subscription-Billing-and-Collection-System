@@ -1,16 +1,19 @@
-/**
+﻿/**
  * Plan routes - Fully implemented
  */
 
 import { FastifyInstance } from 'fastify';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { UUIDSchema, PaginationSchema, CreatePlanRequestSchema, UpdatePlanRequestSchema, PlanSearchSchema } from '@bcis/shared';
 import { db } from '../plugins/database';
 import { servicePlans, users, auditLogs } from '@bcis/db/schema';
 import { eq, and, or, ilike, inArray, desc, asc, count } from 'drizzle-orm';
+import { sortColumn } from '../utils/sort-column';
 
 export async function planRoutes(fastify: FastifyInstance) {
-  fastify.get('/plans', {
+  const app = fastify.withTypeProvider<ZodTypeProvider>();
+  app.get('/plans', {
     schema: { querystring: PlanSearchSchema },
     preHandler: fastify.authorize('plan.view'),
   }, async (request, reply) => {
@@ -29,7 +32,7 @@ export async function planRoutes(fastify: FastifyInstance) {
     if (query.type) conditions.push(eq(servicePlans.type, query.type as any));
     if (query.isActive !== undefined) conditions.push(eq(servicePlans.isActive, query.isActive));
 
-    const orderColumn = servicePlans[query.sortBy as keyof typeof servicePlans] || servicePlans.name;
+    const orderColumn = sortColumn({ name: servicePlans.name, code: servicePlans.code, type: servicePlans.type, monthlyRate: servicePlans.monthlyRate, createdAt: servicePlans.createdAt }, query.sortBy, 'name');
     const orderFn = query.sortOrder === 'asc' ? asc : desc;
 
     const [items, totalResult] = await Promise.all([
@@ -52,7 +55,7 @@ export async function planRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.get('/plans/:id', {
+  app.get('/plans/:id', {
     schema: { params: z.object({ id: UUIDSchema }) },
     preHandler: fastify.authorize('plan.view'),
   }, async (request, reply) => {
@@ -66,7 +69,7 @@ export async function planRoutes(fastify: FastifyInstance) {
     return { success: true, data: { ...plan, monthlyRate: Number(plan.monthlyRate), installationFee: Number(plan.installationFee), reconnectionFee: Number(plan.reconnectionFee) } };
   });
 
-  fastify.post('/plans', {
+  app.post('/plans', {
     schema: { body: CreatePlanRequestSchema },
     preHandler: fastify.authorize('plan.create'),
   }, async (request, reply) => {
@@ -90,7 +93,7 @@ export async function planRoutes(fastify: FastifyInstance) {
     return { success: true, data: { ...plan, monthlyRate: Number(plan.monthlyRate), installationFee: Number(plan.installationFee), reconnectionFee: Number(plan.reconnectionFee) } };
   });
 
-  fastify.patch('/plans/:id', {
+  app.patch('/plans/:id', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: UpdatePlanRequestSchema,

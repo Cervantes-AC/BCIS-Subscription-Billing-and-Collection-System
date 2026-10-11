@@ -1,4 +1,4 @@
-/**
+﻿/**
  * BCIS Database Schema - Payments Tables
  * Payments, allocations, proofs, reversals, GCash verification
  */
@@ -18,7 +18,9 @@ import {
   date,
   jsonb,
   type AnyPgColumn,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { relations } from 'drizzle-orm';
 import { users } from './security';
 import { subscribers } from './subscribers';
@@ -112,12 +114,27 @@ export const paymentAllocations = pgTable(
   })
 );
 
+/** Unapplied advance portions of posted payments, kept as an auditable subscriber balance. */
+export const subscriberCredits = pgTable('subscriber_credits', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  subscriberId: uuid('subscriber_id').notNull().references(() => subscribers.id, { onDelete: 'restrict' }),
+  sourcePaymentId: uuid('source_payment_id').notNull().unique().references(() => payments.id, { onDelete: 'restrict' }),
+  amount: integer('amount').notNull(),
+  remainingAmount: integer('remaining_amount').notNull(),
+  createdBy: uuid('created_by').notNull().references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  subscriberIdx: index('subscriber_credits_subscriber_idx').on(table.subscriberId),
+  remainingCheck: check('subscriber_credits_remaining_nonnegative', sql`${table.remainingAmount} >= 0`),
+  amountCheck: check('subscriber_credits_amount_positive', sql`${table.amount} > 0`),
+}));
+
 export const paymentProofs = pgTable(
   'payment_proofs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     paymentId: uuid('payment_id')
-      .notNull()
       .references(() => payments.id, { onDelete: 'cascade' }),
     fileName: varchar('file_name', { length: 255 }).notNull(),
     filePath: varchar('file_path', { length: 500 }).notNull(),
@@ -219,8 +236,15 @@ export const paymentsRelations = relations(payments, ({ one, many }) => ({
     references: [paymentProofs.id],
   }),
   allocations: many(paymentAllocations),
+  credits: many(subscriberCredits),
   reversals: many(paymentReversals, { relationName: 'original' }),
   reversalRecords: many(paymentReversals, { relationName: 'reversal' }),
+}));
+
+export const subscriberCreditsRelations = relations(subscriberCredits, ({ one }) => ({
+  subscriber: one(subscribers, { fields: [subscriberCredits.subscriberId], references: [subscribers.id] }),
+  sourcePayment: one(payments, { fields: [subscriberCredits.sourcePaymentId], references: [payments.id] }),
+  creator: one(users, { fields: [subscriberCredits.createdBy], references: [users.id] }),
 }));
 
 export const paymentAllocationsRelations = relations(paymentAllocations, ({ one }) => ({
@@ -291,6 +315,8 @@ export type Payment = typeof payments.$inferSelect;
 export type NewPayment = typeof payments.$inferInsert;
 export type PaymentAllocation = typeof paymentAllocations.$inferSelect;
 export type NewPaymentAllocation = typeof paymentAllocations.$inferInsert;
+export type SubscriberCredit = typeof subscriberCredits.$inferSelect;
+export type NewSubscriberCredit = typeof subscriberCredits.$inferInsert;
 export type PaymentProof = typeof paymentProofs.$inferSelect;
 export type NewPaymentProof = typeof paymentProofs.$inferInsert;
 export type PaymentReversal = typeof paymentReversals.$inferSelect;

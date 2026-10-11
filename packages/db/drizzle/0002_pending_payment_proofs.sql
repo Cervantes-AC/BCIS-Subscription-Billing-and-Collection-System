@@ -1,0 +1,1 @@
+ALTER TABLE "payment_proofs" ALTER COLUMN "payment_id" DROP NOT NULL;

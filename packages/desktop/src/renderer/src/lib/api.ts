@@ -147,8 +147,16 @@ class ApiClient {
     return this.request<PaginatedResponse<T>>(path, { params });
   }
 
-  async get<T>(path: string) {
-    return this.request<T>(path);
+  async get<T = any>(path: string, params?: Record<string, string | number | boolean | undefined>) {
+    return this.request<T>(path, { params });
+  }
+
+  async post<T>(path: string, data: any) {
+    return this.create<T>(path, data);
+  }
+
+  async patch<T>(path: string, data: any) {
+    return this.update<T>(path, data);
   }
 
   async create<T>(path: string, data: any) {
@@ -210,7 +218,7 @@ class ApiClient {
   }
 
   async listSubscribers(params: any) {
-    return this.request('/subscribers', { params });
+    return (await this.request<any>('/subscribers', { params })).data;
   }
 
   async getSubscriber(id: string) {
@@ -227,7 +235,7 @@ class ApiClient {
 
   // Plans
   async listPlans(params: any) {
-    return this.request('/plans', { params });
+    return (await this.request<any>('/plans', { params })).data;
   }
 
   async getPlan(id: string) {
@@ -244,7 +252,7 @@ class ApiClient {
 
   // Service Accounts
   async listServiceAccounts(params: any) {
-    return this.request('/service-accounts', { params });
+    return (await this.request<any>('/service-accounts', { params })).data;
   }
 
   async getServiceAccount(id: string) {
@@ -261,17 +269,28 @@ class ApiClient {
 
   // Users
   async listUsers(params: any) {
-    return this.request('/users', { params });
+    return (await this.request<any>('/users', { params })).data;
   }
 
   // Collection Areas
   async listCollectionAreas(params: any) {
-    return this.request('/collection-areas', { params });
+    return (await this.request<any>('/collection-areas', { params })).data;
+  }
+
+  async assignCollector(areaId: string, collectorId: string) {
+    return this.request(`/collection-areas/${areaId}/assign-collector`, {
+      method: 'POST',
+      body: JSON.stringify({ collectorId }),
+    });
+  }
+
+  async listCollectionCollectors() {
+    return this.request('/collection-collectors');
   }
 
   // Billing Cycles
   async listBillingCycles(params: any) {
-    return this.request('/billing-cycles', { params });
+    return (await this.request<any>('/billing-cycles', { params })).data;
   }
 
   async createBillingCycle(data: any) {
@@ -288,7 +307,7 @@ class ApiClient {
 
   // Invoices
   async listInvoices(params: any) {
-    return this.request('/invoices', { params });
+    return (await this.request<any>('/invoices', { params })).data;
   }
 
   async getInvoice(id: string) {
@@ -301,7 +320,7 @@ class ApiClient {
 
   // Payments
   async listPayments(params: any) {
-    return this.request('/payments', { params });
+    return (await this.request<any>('/payments', { params })).data;
   }
 
   async getPayment(id: string) {
@@ -323,9 +342,13 @@ class ApiClient {
     });
   }
 
+  async getSubscriberCreditBalance(subscriberId: string) {
+    return this.request(`/subscribers/${subscriberId}/credit-balance`);
+  }
+
   // GCash Verification
   async getGCashQueue(params: any) {
-    return this.request('/gcash/queue', { params });
+    return (await this.request<any>('/gcash/queue', { params })).data;
   }
 
   async processGCashVerification(id: string, action: 'verify' | 'reject', rejectReason?: string, subscriberId?: string) {
@@ -337,7 +360,7 @@ class ApiClient {
 
   // Collections
   async listCollectionBatches(params: any) {
-    return this.request('/collection-batches', { params });
+    return (await this.request<any>('/collection-batches', { params })).data;
   }
 
   async getCollectionBatch(id: string) {

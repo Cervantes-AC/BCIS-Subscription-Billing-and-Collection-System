@@ -1,4 +1,4 @@
-/**
+﻿/**
  * BCIS Database Schema - Security Tables
  * Users, roles, permissions, and RBAC
  */

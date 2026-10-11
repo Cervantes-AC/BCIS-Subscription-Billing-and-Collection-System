@@ -1,4 +1,4 @@
-/**
+﻿/**
  * BCIS Database Schema - Payments Tables
  * Payments, allocations, proofs, reversals, GCash verification
  */

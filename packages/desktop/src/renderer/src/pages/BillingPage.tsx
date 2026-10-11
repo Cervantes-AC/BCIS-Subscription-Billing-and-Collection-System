@@ -164,6 +164,7 @@ export function BillingPage() {
           plans={plans?.items || []}
           onGenerate={handleGenerateBilling}
           isGenerating={generateMutation.isPending}
+          setActiveTab={setActiveTab}
         />
       </section>
     );
@@ -355,7 +356,7 @@ export function BillingPage() {
       {showCreateCycle && (
         <CreateCycleModal
           onClose={() => setShowCreateCycle(false)}
-          onSubmit={async (data) => { await createCycleMutation.mutateAsync(data); setShowCreateCycle(false); }}
+          onSubmit={async (data: any) => { await createCycleMutation.mutateAsync(data); setShowCreateCycle(false); }}
           isSubmitting={createCycleMutation.isPending}
         />
       )}
@@ -365,7 +366,7 @@ export function BillingPage() {
 
 const [showCreateCycle, setShowCreateCycle] = useState(false);
 
-function GenerateBillingForm({ cycles, plans, onGenerate, isGenerating }: any) {
+function GenerateBillingForm({ cycles, plans, onGenerate, isGenerating, setActiveTab }: any) {
   const [formData, setFormData] = useState({
     billingCycleId: '',
     serviceAccountIds: [] as string[],

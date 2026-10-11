@@ -489,6 +489,12 @@
     animation: fadeIn 0.15s ease-out;
   }
 
+  @media print {
+    body * { visibility: hidden !important; }
+    .route-sheet-print, .route-sheet-print * { visibility: visible !important; }
+    .route-sheet-print { position: absolute; inset: 0; width: 100%; background: white; }
+  }
+
   @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }

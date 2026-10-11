@@ -1,23 +1,29 @@
-/**
+﻿/**
  * Authentication routes
  */
 
 import { FastifyInstance } from 'fastify';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { eq, and, gt } from 'drizzle-orm';
+import { users, sessions } from '@bcis/db/schema';
 import { LoginRequestSchema, ChangePasswordRequestSchema, RefreshTokenRequestSchema, AuthResponseSchema } from '@bcis/shared';
 import { hashPassword, verifyPassword, generateAccessToken, generateRefreshToken, getAccessTokenExpiry, getRefreshTokenExpiry, validatePasswordStrength } from '../utils/auth';
 import { config } from '../config';
 
+const LoginReplySchema = z.object({ success: z.boolean(), data: AuthResponseSchema });
+
 export async function authRoutes(fastify: FastifyInstance) {
+  const app = fastify.withTypeProvider<ZodTypeProvider>();
   // Login
   fastify.post<{
     Body: z.infer<typeof LoginRequestSchema>;
-    Reply: z.infer<typeof AuthResponseSchema>;
+    Reply: z.infer<typeof LoginReplySchema> | { success: false; error: { code: string; message: string; statusCode: number } };
   }>('/auth/login', {
     schema: {
       body: LoginRequestSchema,
       response: {
-        200: AuthResponseSchema,
+        200: LoginReplySchema,
       },
     },
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
@@ -26,7 +32,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
     // Find user
     const user = await fastify.db.query.users.findFirst({
-      where: (users, { eq }) => eq(users.username, username),
+      where: eq(users.username, username),
       with: {
         role: {
           with: {
@@ -57,14 +63,14 @@ export async function authRoutes(fastify: FastifyInstance) {
     if (!valid) {
       // Increment failed attempts
       await fastify.db
-        .update(fastify.db.schema.users)
+        .update(users)
         .set({ 
           failedLoginAttempts: user.failedLoginAttempts + 1,
           lockedUntil: user.failedLoginAttempts + 1 >= config.maxFailedLoginAttempts 
             ? new Date(Date.now() + config.lockoutDurationMinutes * 60 * 1000) 
             : null,
         })
-        .where(eq(fastify.db.schema.users.id, user.id));
+        .where(eq(users.id, user.id));
 
       return reply.code(401).send({
         success: false,
@@ -87,7 +93,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     const refreshTokenExpiresAt = getRefreshTokenExpiry();
 
     // Store session
-    await fastify.db.insert(fastify.db.schema.sessions).values({
+    await fastify.db.insert(sessions).values({
       userId: user.id,
       accessToken,
       refreshToken,
@@ -99,13 +105,13 @@ export async function authRoutes(fastify: FastifyInstance) {
 
     // Reset failed attempts and update last login
     await fastify.db
-      .update(fastify.db.schema.users)
+      .update(users)
       .set({ 
         failedLoginAttempts: 0,
         lockedUntil: null,
         lastLoginAt: new Date(),
       })
-      .where(eq(fastify.db.schema.users.id, user.id));
+      .where(eq(users.id, user.id));
 
     // Set cookies
     reply.setCookie('accessToken', accessToken, {
@@ -125,7 +131,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     });
 
     // Prepare response
-    const permissions = user.role?.rolePermissions?.map(rp => ({
+    const permissions = user.role?.rolePermissions?.map((rp: any) => ({
       id: rp.permission.id,
       code: rp.permission.code,
       name: rp.permission.name,
@@ -156,16 +162,16 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   // Logout
-  fastify.post('/auth/logout', {
+  app.post('/auth/logout', {
     preHandler: fastify.authenticate,
   }, async (request, reply) => {
     const accessToken = request.cookies.accessToken || request.headers.authorization?.replace('Bearer ', '');
     
     if (accessToken) {
       await fastify.db
-        .update(fastify.db.schema.sessions)
+        .update(sessions)
         .set({ isRevoked: true })
-        .where(eq(fastify.db.schema.sessions.accessToken, accessToken));
+        .where(eq(sessions.accessToken, accessToken));
     }
 
     reply.clearCookie('accessToken', { path: '/' });
@@ -190,7 +196,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     }
 
     const session = await fastify.db.query.sessions.findFirst({
-      where: (sessions, { eq, and, gt }) => and(
+      where: and(
         eq(sessions.refreshToken, refreshToken),
         eq(sessions.isRevoked, false),
         gt(sessions.refreshTokenExpiresAt, new Date())
@@ -225,12 +231,12 @@ export async function authRoutes(fastify: FastifyInstance) {
 
     // Revoke old session
     await fastify.db
-      .update(fastify.db.schema.sessions)
+      .update(sessions)
       .set({ isRevoked: true })
-      .where(eq(fastify.db.schema.sessions.id, session.id));
+      .where(eq(sessions.id, session.id));
 
     // Create new session
-    await fastify.db.insert(fastify.db.schema.sessions).values({
+    await fastify.db.insert(sessions).values({
       userId: session.userId,
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
@@ -288,12 +294,12 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   // Get current user
-  fastify.get('/auth/me', {
+  app.get('/auth/me', {
     preHandler: fastify.authenticate,
   }, async (request, reply) => {
     const user = request.user as any;
     
-    const permissions = user.role?.rolePermissions?.map(rp => ({
+    const permissions = user.role?.rolePermissions?.map((rp: any) => ({
       id: rp.permission.id,
       code: rp.permission.code,
       name: rp.permission.name,
@@ -332,7 +338,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
     // Verify current password
     const dbUser = await fastify.db.query.users.findFirst({
-      where: (users, { eq }) => eq(users.id, user.id),
+      where: eq(users.id, user.id),
     });
 
     if (!dbUser) {
@@ -364,18 +370,18 @@ export async function authRoutes(fastify: FastifyInstance) {
 
     // Update password
     await fastify.db
-      .update(fastify.db.schema.users)
+      .update(users)
       .set({ 
         passwordHash: newHash,
         passwordChangedAt: new Date(),
       })
-      .where(eq(fastify.db.schema.users.id, user.id));
+      .where(eq(users.id, user.id));
 
     // Revoke all sessions
     await fastify.db
-      .update(fastify.db.schema.sessions)
+      .update(sessions)
       .set({ isRevoked: true })
-      .where(eq(fastify.db.schema.sessions.userId, user.id));
+      .where(eq(sessions.userId, user.id));
 
     return { success: true, data: { message: 'Password changed successfully. Please log in again.' } };
   });

@@ -6,6 +6,9 @@
 import { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import fastifyCookie from '@fastify/cookie';
+import fp from 'fastify-plugin';
+import { and, eq, gt } from 'drizzle-orm';
+import { sessions } from '@bcis/db/schema';
 import { config } from '../config';
 
 const authPlugin: FastifyPluginAsync = async (fastify) => {
@@ -31,33 +34,38 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     },
   });
 
-  // Decorate request with user
-  fastify.decorateRequest('user', null);
-
-  // Authentication hook
-  fastify.addHook('preHandler', async (request, reply) => {
-    // Skip auth for public routes
-    const publicPaths = ['/health', '/health/db', '/auth/login', '/auth/refresh', '/documentation', '/docs'];
-    if (publicPaths.some(p => request.url.startsWith(p))) {
+  // Decorate fastify with auth helpers
+  fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
+    const token = request.cookies?.accessToken || request.headers?.authorization?.replace(/^Bearer\s+/i, '');
+    if (!token) {
+      reply.code(401).send({ success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required', statusCode: 401 } });
       return;
     }
 
-    try {
-      await request.jwtVerify();
-      request.user = request.user;
-    } catch (err) {
-      // Don't throw here, let individual routes handle auth
+    const session = await fastify.db.query.sessions.findFirst({
+      where: and(eq(sessions.accessToken, token), gt(sessions.accessTokenExpiresAt, new Date())),
+      with: {
+        user: {
+          with: { role: { with: { rolePermissions: { with: { permission: true } } } } },
+        },
+      },
+    });
+    if (!session || session.user.status !== 'active') {
+      reply.code(401).send({ success: false, error: { code: 'UNAUTHORIZED', message: 'Session expired or user is inactive', statusCode: 401 } });
+      return;
     }
-  });
-
-  // Decorate fastify with auth helpers
-  fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      await request.jwtVerify();
-      request.user = request.user;
-    } catch (err) {
-      reply.code(401).send({ success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required', statusCode: 401 } });
-    }
+    request.user = {
+      id: session.user.id,
+      username: session.user.username,
+      email: session.user.email,
+      fullName: session.user.fullName,
+      roleId: session.user.roleId,
+      role: {
+        id: session.user.role.id,
+        name: session.user.role.name,
+        permissions: session.user.role.rolePermissions.map((rp: any) => rp.permission),
+      },
+    } as any;
   });
 
   fastify.decorate('authorize', (permissions: string | string[]) => {
@@ -87,4 +95,4 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.log.info('Auth plugin registered');
 };
 
-export default authPlugin;
+export default fp(authPlugin);

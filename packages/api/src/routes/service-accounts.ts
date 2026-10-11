@@ -1,17 +1,20 @@
-/**
+﻿/**
  * Service account routes - Fully implemented
  */
 
 import { FastifyInstance } from 'fastify';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { UUIDSchema, PaginationSchema, CreateServiceAccountRequestSchema, UpdateServiceAccountRequestSchema, ServiceAccountSearchSchema } from '@bcis/shared';
 import { db } from '../plugins/database';
 import { serviceAccounts, servicePlans, subscriberAddresses, subscribers, users, auditLogs, invoices, payments } from '@bcis/db/schema';
 import { eq, and, or, ilike, inArray, desc, asc, count } from 'drizzle-orm';
 import { generateServiceAccountNumber } from '../utils/numbering';
+import { sortColumn } from '../utils/sort-column';
 
 export async function serviceAccountRoutes(fastify: FastifyInstance) {
-  fastify.get('/service-accounts', {
+  const app = fastify.withTypeProvider<ZodTypeProvider>();
+  app.get('/service-accounts', {
     schema: { querystring: ServiceAccountSearchSchema },
     preHandler: fastify.authorize('subscriber.view'),
   }, async (request, reply) => {
@@ -33,7 +36,7 @@ export async function serviceAccountRoutes(fastify: FastifyInstance) {
       conditions.push(inArray(serviceAccounts.subscriberId, subIds.map(s => s.id)));
     }
 
-    const orderColumn = serviceAccounts[query.sortBy as keyof typeof serviceAccounts] || serviceAccounts.accountNumber;
+    const orderColumn = sortColumn({ accountNumber: serviceAccounts.accountNumber, status: serviceAccounts.status, billingDay: serviceAccounts.billingDay, createdAt: serviceAccounts.createdAt }, query.sortBy, 'accountNumber');
     const orderFn = query.sortOrder === 'asc' ? asc : desc;
 
     const [items, totalResult] = await Promise.all([
@@ -67,7 +70,7 @@ export async function serviceAccountRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.get('/service-accounts/:id', {
+  app.get('/service-accounts/:id', {
     schema: { params: z.object({ id: UUIDSchema }) },
     preHandler: fastify.authorize('subscriber.view'),
   }, async (request, reply) => {
@@ -79,7 +82,6 @@ export async function serviceAccountRoutes(fastify: FastifyInstance) {
         installationAddress: true,
         collector: true,
         invoices: { orderBy: desc(invoices.generatedAt), limit: 20, with: { items: true, allocations: { with: { payment: true } } } },
-        payments: { orderBy: desc(payments.paymentDate), limit: 20, with: { allocations: { with: { invoice: true } } } },
       },
     });
     if (!sa) {
@@ -90,11 +92,11 @@ export async function serviceAccountRoutes(fastify: FastifyInstance) {
       currentRate: sa.currentRate ? Number(sa.currentRate) : undefined,
       plan: sa.plan ? { ...sa.plan, monthlyRate: Number(sa.plan.monthlyRate) } : undefined,
       invoices: sa.invoices.map(inv => ({ ...inv, totalAmount: Number(inv.totalAmount), paidAmount: Number(inv.paidAmount), balance: Number(inv.balance) })),
-      payments: sa.payments.map(pmt => ({ ...pmt, amount: Number(pmt.amount) })),
+      payments: [...new Map(sa.invoices.flatMap((invoice) => invoice.allocations.map((allocation) => allocation.payment)).filter(Boolean).map((payment) => [payment.id, payment])).values()].map((payment) => ({ ...payment, amount: Number(payment.amount) })),
     }};
   });
 
-  fastify.post('/service-accounts', {
+  app.post('/service-accounts', {
     schema: { body: CreateServiceAccountRequestSchema },
     preHandler: fastify.authorize('subscriber.create'),
   }, async (request, reply) => {
@@ -110,7 +112,7 @@ export async function serviceAccountRoutes(fastify: FastifyInstance) {
     const address = await db.query.subscriberAddresses.findFirst({ where: eq(subscriberAddresses.id, request.body.installationAddressId) });
     if (!address) return reply.code(400).send({ success: false, error: { code: 'INVALID_ADDRESS', message: 'Installation address not found', statusCode: 400 } });
 
-    const accountNumber = await generateServiceAccountNumber();
+    const accountNumber = await generateServiceAccountNumber(fastify);
 
     const [sa] = await db.transaction(async (tx) => {
       const [newSa] = await tx.insert(serviceAccounts).values({
@@ -137,7 +139,7 @@ export async function serviceAccountRoutes(fastify: FastifyInstance) {
     return { success: true, data: { ...sa, currentRate: Number(sa.currentRate) } };
   });
 
-  fastify.patch('/service-accounts/:id', {
+  app.patch('/service-accounts/:id', {
     schema: {
       params: z.object({ id: UUIDSchema }),
       body: UpdateServiceAccountRequestSchema,

@@ -277,7 +277,7 @@ export function ReportsPage() {
                 required
               >
                 <option value="">Select Subscriber</option>
-                {subscribers?.subscribers?.map((s: any) => (
+                {(subscribers as any)?.subscribers?.map((s: any) => (
                   <option key={s.id} value={s.id}>
                     {s.accountNumber} - {s.firstName} {s.lastName}
                   </option>

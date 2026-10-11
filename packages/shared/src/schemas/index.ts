@@ -25,8 +25,8 @@ export const DateStringSchema = z.string().datetime({ offset: true }).describe('
 export const UUIDSchema = z.string().uuid().describe('UUID v4');
 
 export const PaginationSchema = z.object({
-  page: z.number().int().min(1).default(1),
-  limit: z.number().int().min(1).max(100).default(20),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
   sortBy: z.string().optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
 });
@@ -350,6 +350,7 @@ export const UpdateCollectionBatchRequestSchema = z.object({
 
 export const CollectionBatchAccountUpdateSchema = z.object({
   collectedAmount: CentavosSchema,
+  paymentId: UUIDSchema.optional(),
   collectedMethod: z.enum(['cash', 'gcash', 'bank_transfer', 'cheque', 'other']).optional(),
   collectedAt: DateStringSchema.optional(),
   notes: z.string().max(500).optional(),

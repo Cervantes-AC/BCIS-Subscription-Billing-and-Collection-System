@@ -1,8 +1,9 @@
-/**
+﻿/**
  * Report routes - Fully implemented
  */
 
 import { FastifyInstance } from 'fastify';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { UUIDSchema, ReportPeriodSchema, AgingReportRequestSchema } from '@bcis/shared';
 import { 
@@ -14,19 +15,20 @@ import {
 import { getCollectionEfficiency, getRevenueReport } from '../services/receivables';
 
 export async function reportRoutes(fastify: FastifyInstance) {
-  fastify.get('/reports/dashboard', {
+  const app = fastify.withTypeProvider<ZodTypeProvider>();
+  app.get('/reports/dashboard', {
     preHandler: fastify.authorize('report.view'),
   }, async (request, reply) => {
     // Dashboard KPIs would be aggregated from multiple services
     return { success: true, data: { message: 'Dashboard endpoint - needs full implementation' } };
   });
 
-  fastify.get('/reports/collection', {
+  app.get('/reports/collection', {
     schema: { querystring: ReportPeriodSchema },
     preHandler: fastify.authorize('report.view'),
   }, async (request, reply) => {
     const query = request.query as any;
-    const result = await getCollectionEfficiency({
+    const result = await getCollectionEfficiency(fastify, {
       dateFrom: new Date(query.date),
       dateTo: new Date(query.date),
       collectorId: query.collectorId,
@@ -35,12 +37,12 @@ export async function reportRoutes(fastify: FastifyInstance) {
     return { success: true, data: result };
   });
 
-  fastify.get('/reports/revenue', {
+  app.get('/reports/revenue', {
     schema: { querystring: ReportPeriodSchema.extend({ groupBy: z.enum(['plan', 'service', 'area']).default('plan') }) },
     preHandler: fastify.authorize('report.view'),
   }, async (request, reply) => {
     const query = request.query as any;
-    const result = await getRevenueReport({
+    const result = await getRevenueReport(fastify, {
       dateFrom: new Date(query.date),
       dateTo: new Date(query.date),
       groupBy: query.groupBy === 'service' ? 'service_type' : query.groupBy,
@@ -48,12 +50,12 @@ export async function reportRoutes(fastify: FastifyInstance) {
     return { success: true, data: result };
   });
 
-  fastify.get('/reports/collector-performance', {
+  app.get('/reports/collector-performance', {
     schema: { querystring: ReportPeriodSchema.extend({ collectorId: UUIDSchema.optional(), areaId: UUIDSchema.optional() }) },
     preHandler: fastify.authorize('report.view'),
   }, async (request, reply) => {
     const query = request.query as any;
-    const result = await getCollectionEfficiency({
+    const result = await getCollectionEfficiency(fastify, {
       dateFrom: new Date(query.date),
       dateTo: new Date(query.date),
       collectorId: query.collectorId,
@@ -62,12 +64,12 @@ export async function reportRoutes(fastify: FastifyInstance) {
     return { success: true, data: result.byCollector };
   });
 
-  fastify.get('/reports/ar-aging', {
+  app.get('/reports/ar-aging', {
     schema: { querystring: AgingReportRequestSchema },
     preHandler: fastify.authorize('report.view'),
   }, async (request, reply) => {
     const query = request.query as any;
-    const { summary, details } = await (await import('../services/receivables')).calculateAging(new Date(query.asOfDate), {
+    const { summary, details } = await (await import('../services/receivables.js')).calculateAging(fastify, new Date(query.asOfDate), {
       collectorId: query.collectorId,
       areaId: query.areaId,
       planId: query.planId,
@@ -76,7 +78,7 @@ export async function reportRoutes(fastify: FastifyInstance) {
     return { success: true, data: { summary, details } };
   });
 
-  fastify.get('/reports/subscriber-masterlist', {
+  app.get('/reports/subscriber-masterlist', {
     schema: { querystring: z.object({ areaId: UUIDSchema.optional(), collectorId: UUIDSchema.optional(), status: z.enum(['active', 'inactive', 'terminated', 'archived']).optional() }) },
     preHandler: fastify.authorize('report.view'),
   }, async (request, reply) => {
@@ -84,7 +86,7 @@ export async function reportRoutes(fastify: FastifyInstance) {
   });
 
   // Export endpoints
-  fastify.get('/reports/export/:type', {
+  app.get('/reports/export/:type', {
     schema: {
       params: z.object({ type: z.enum(['collection', 'revenue', 'collector', 'aging', 'masterlist', 'billing-vs-collection']) }),
       querystring: z.object({ format: z.enum(['pdf', 'xlsx']).default('xlsx') }).merge(ReportPeriodSchema).extend({
@@ -107,7 +109,7 @@ export async function reportRoutes(fastify: FastifyInstance) {
       switch (type) {
         case 'collection': {
           const period = query.date ? new Date(query.date) : new Date();
-          buffer = await generateMonthlyCollectionReportXLSX(period, { 
+          buffer = await generateMonthlyCollectionReportXLSX(fastify, period, {
             collectorId: query.collectorId, 
             areaId: query.areaId 
           });
@@ -117,7 +119,7 @@ export async function reportRoutes(fastify: FastifyInstance) {
         }
         case 'aging': {
           const asOfDate = query.asOfDate ? new Date(query.asOfDate) : new Date();
-          buffer = await generateARAgingReportXLSX(asOfDate, { 
+          buffer = await generateARAgingReportXLSX(fastify, asOfDate, {
             collectorId: query.collectorId, 
             areaId: query.areaId 
           });
@@ -127,6 +129,7 @@ export async function reportRoutes(fastify: FastifyInstance) {
         }
         case 'collector': {
           buffer = await generateCollectorRemittanceReportXLSX(
+            fastify,
             new Date(query.dateFrom), 
             new Date(query.dateTo), 
             query.collectorId
@@ -137,6 +140,7 @@ export async function reportRoutes(fastify: FastifyInstance) {
         }
         case 'billing-vs-collection': {
           buffer = await generateBillingVsCollectionReportXLSX(
+            fastify,
             new Date(query.dateFrom), 
             new Date(query.dateTo)
           );

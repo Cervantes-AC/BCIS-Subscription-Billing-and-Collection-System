@@ -1,4 +1,4 @@
-/**
+﻿/**
  * BCIS Database Seed Script
  * Seeds the database with initial data for development and testing
  */
@@ -248,9 +248,9 @@ async function seedDatabase() {
           name: 'Basic Internet 20 Mbps',
           description: 'Basic internet plan for light browsing',
           type: 'internet' as const,
-          monthlyRate: 99900, // ₱999.00
-          installationFee: 150000, // ₱1,500.00
-          reconnectionFee: 50000, // ₱500.00
+          monthlyRate: 99900, // â‚±999.00
+          installationFee: 150000, // â‚±1,500.00
+          reconnectionFee: 50000, // â‚±500.00
           speedMbps: 20,
           dataCapGb: 100,
           isActive: true,
@@ -261,7 +261,7 @@ async function seedDatabase() {
           name: 'Standard Internet 50 Mbps',
           description: 'Standard internet plan for streaming and work',
           type: 'internet' as const,
-          monthlyRate: 149900, // ₱1,499.00
+          monthlyRate: 149900, // â‚±1,499.00
           installationFee: 150000,
           reconnectionFee: 50000,
           speedMbps: 50,
@@ -274,7 +274,7 @@ async function seedDatabase() {
           name: 'Premium Internet 100 Mbps',
           description: 'High-speed internet for heavy usage',
           type: 'internet' as const,
-          monthlyRate: 249900, // ₱2,499.00
+          monthlyRate: 249900, // â‚±2,499.00
           installationFee: 200000,
           reconnectionFee: 50000,
           speedMbps: 100,
@@ -287,7 +287,7 @@ async function seedDatabase() {
           name: 'Basic Cable TV',
           description: 'Basic cable package with local channels',
           type: 'cable' as const,
-          monthlyRate: 49900, // ₱499.00
+          monthlyRate: 49900, // â‚±499.00
           installationFee: 100000,
           reconnectionFee: 30000,
           channelCount: 80,
@@ -300,7 +300,7 @@ async function seedDatabase() {
           name: 'Premium Cable TV',
           description: 'Premium cable with HD and premium channels',
           type: 'cable' as const,
-          monthlyRate: 89900, // ₱899.00
+          monthlyRate: 89900, // â‚±899.00
           installationFee: 150000,
           reconnectionFee: 30000,
           channelCount: 150,
@@ -313,7 +313,7 @@ async function seedDatabase() {
           name: 'Internet 20 Mbps + Basic Cable',
           description: 'Bundle: Basic internet + Basic cable',
           type: 'combo' as const,
-          monthlyRate: 129900, // ₱1,299.00
+          monthlyRate: 129900, // â‚±1,299.00
           installationFee: 200000,
           reconnectionFee: 50000,
           speedMbps: 20,
@@ -328,7 +328,7 @@ async function seedDatabase() {
           name: 'Internet 50 Mbps + Premium Cable',
           description: 'Bundle: Standard internet + Premium cable',
           type: 'combo' as const,
-          monthlyRate: 199900, // ₱1,999.00
+          monthlyRate: 199900, // â‚±1,999.00
           installationFee: 250000,
           reconnectionFee: 50000,
           speedMbps: 50,

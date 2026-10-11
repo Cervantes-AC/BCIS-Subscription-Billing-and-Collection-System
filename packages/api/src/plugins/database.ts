@@ -4,14 +4,18 @@
  */
 
 import { FastifyPluginAsync } from 'fastify';
+import fp from 'fastify-plugin';
 import { getDb, closeDb, healthCheck, transaction } from '@bcis/db';
+
+export let db: ReturnType<typeof getDb>;
 
 const databasePlugin: FastifyPluginAsync = async (fastify) => {
   // Initialize database connection
-  const db = getDb();
+  const database = getDb();
+  db = database;
   
   // Decorate fastify with database instance
-  fastify.decorate('db', db);
+  fastify.decorate('db', database);
   
   // Add transaction helper
   fastify.decorate('transaction', transaction);
@@ -30,4 +34,4 @@ const databasePlugin: FastifyPluginAsync = async (fastify) => {
   fastify.log.info('Database plugin registered');
 };
 
-export default databasePlugin;
+export default fp(databasePlugin);

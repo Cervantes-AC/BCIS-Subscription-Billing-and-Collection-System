@@ -123,7 +123,7 @@ export function PaymentForm({
             <button
               key={value}
               type="button"
-              onClick={() => setMethod(value)}
+              onClick={() => setMethod(value as typeof method)}
               className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${
                 method === value
                   ? 'border-primary bg-primary/5'
