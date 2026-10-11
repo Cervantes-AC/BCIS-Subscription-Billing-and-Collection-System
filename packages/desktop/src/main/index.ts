@@ -25,7 +25,9 @@ function createWindow(): void {
     title: 'BCIS Billing System',
     backgroundColor: '#0F2747',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      // electron-vite emits the preload as ESM because the desktop package is
+      // type=module. Keep this extension in sync with that output.
+      preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
@@ -81,6 +83,8 @@ function createWindow(): void {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  ipcMain.handle('app:getVersion', () => app.getVersion());
+
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();

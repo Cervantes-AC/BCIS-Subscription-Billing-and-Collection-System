@@ -10,7 +10,7 @@
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
     "test": "vitest run",
-    "test:unit": "vitest run src/services/__tests__",
+    "test:unit": "vitest run src/services/__tests__ src/plugins/__tests__",
     "test:integration": "vitest run src/services/__tests__/acceptance.integration.test.ts",
     "typecheck": "tsc --noEmit"
   },

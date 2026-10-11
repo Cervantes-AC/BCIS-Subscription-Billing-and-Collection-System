@@ -14,7 +14,7 @@ interface ElectronAPI {
   isMaximized: () => Promise<boolean>;
 
   // App info
-  getVersion: () => string;
+  getVersion: () => Promise<string>;
   getPlatform: () => string;
 
   // File operations
@@ -62,7 +62,7 @@ const electronAPI: ElectronAPI = {
   isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
 
   // App info
-  getVersion: () => app.getVersion(),
+  getVersion: () => ipcRenderer.invoke('app:getVersion'),
   getPlatform: () => process.platform,
 
   // File operations
@@ -118,6 +118,3 @@ declare global {
     electronAPI: ElectronAPI;
   }
 }
-
-// Import app for version
-import { app } from 'electron';
