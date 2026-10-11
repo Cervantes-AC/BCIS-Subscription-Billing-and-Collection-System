@@ -1,0 +1,39 @@
+{
+  "name": "bcis-billing-system",
+  "version": "1.0.0",
+  "description": "BCIS Subscription Billing and Collection System - A comprehensive desktop application for Bukidnon Cable and Internet Services",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @bcis/api dev\" \"pnpm --filter @bcis/desktop dev\"",
+    "build": "pnpm --filter @bcis/shared run build && pnpm --filter @bcis/db run build && pnpm --filter @bcis/api run build && pnpm --filter @bcis/desktop run build",
+    "build:desktop": "pnpm --filter @bcis/desktop run build",
+    "build:api": "pnpm --filter @bcis/api run build",
+    "db:generate": "pnpm --filter @bcis/db run generate",
+    "db:migrate": "pnpm --filter @bcis/db run migrate",
+    "db:push": "pnpm --filter @bcis/db run push",
+    "db:seed": "pnpm --filter @bcis/db run seed",
+    "db:studio": "pnpm --filter @bcis/db run studio",
+    "lint": "pnpm --filter @bcis/desktop run lint && pnpm --filter @bcis/api run lint && pnpm --filter @bcis/shared run lint",
+    "test": "pnpm --filter @bcis/desktop run test && pnpm --filter @bcis/api run test && pnpm --filter @bcis/shared run test",
+    "test:unit": "pnpm --filter @bcis/shared run test && pnpm --filter @bcis/api run test:unit",
+    "test:integration": "pnpm --filter @bcis/api run test:integration",
+    "test:e2e": "pnpm --filter @bcis/desktop run test:e2e",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "concurrently": "^8.2.2",
+    "husky": "^9.0.11",
+    "prettier": "^3.3.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.4.0"
+}

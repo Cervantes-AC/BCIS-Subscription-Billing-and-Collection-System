@@ -1,0 +1,12 @@
+﻿node_modules/
+dist/
+out/
+.electron-vite/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+uploads/
+attachments/
+backups/

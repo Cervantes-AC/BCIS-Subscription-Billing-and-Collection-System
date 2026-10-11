@@ -1,0 +1,47 @@
+{
+  "name": "@bcis/api",
+  "version": "1.0.0",
+  "description": "Fastify API server for BCIS Billing System",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "test:unit": "vitest run --workspace=unit",
+    "test:integration": "vitest run --workspace=integration",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bcis/db": "workspace:*",
+    "@bcis/shared": "workspace:*",
+    "@fastify/cookie": "^9.3.1",
+    "@fastify/cors": "^9.0.1",
+    "@fastify/jwt": "^8.0.1",
+    "@fastify/multipart": "^8.2.0",
+    "@fastify/rate-limit": "^9.1.0",
+    "@fastify/swagger": "^8.14.0",
+    "@fastify/swagger-ui": "^4.0.0",
+    "@types/pdfkit": "^0.17.6",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^18.0.6",
+    "drizzle-orm": "^0.32.0",
+    "exceljs": "^4.4.0",
+    "fastify": "^4.28.1",
+    "fastify-plugin": "^4.5.1",
+    "fastify-zod": "^1.4.0",
+    "pdfkit": "^0.20.2",
+    "pino": "^9.2.0",
+    "pino-pretty": "^11.2.1",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}

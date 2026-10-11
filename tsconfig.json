@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@bcis/shared/*": ["packages/shared/src/*"],
+      "@bcis/db/*": ["packages/db/src/*"],
+      "@bcis/api/*": ["packages/api/src/*"],
+      "@bcis/desktop/*": ["packages/desktop/src/*"]
+    }
+  },
+  "exclude": ["node_modules", "dist", "build", ".electron-vite"]
+}
