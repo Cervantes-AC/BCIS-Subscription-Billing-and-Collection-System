@@ -146,6 +146,7 @@ The documented acceptance scenarios are AT-01 through AT-12. Some require manual
 - **Database or relation does not exist:** Run `pnpm db:migrate`, then `pnpm db:seed`.
 - **Port 3000 or 5432 is already in use:** Stop the other service or adjust its port and corresponding configuration.
 - **Desktop reports a network error:** Check `http://localhost:3000/health` first. Confirm the desktop app's API URL points to the running API; for custom addresses, rebuild with the matching `VITE_API_URL`.
+- **Desktop window is blank or does not open:** Check the desktop terminal for startup errors. The dev launcher clears `ELECTRON_RUN_AS_NODE` automatically; if launching Electron another way, clear it in PowerShell with `$env:ELECTRON_RUN_AS_NODE = $null` and restart the desktop process.
 - **Need to reset a development database:** This deletes existing data. Back it up first, or use a newly created disposable database for testing.
 
 ## More documentation

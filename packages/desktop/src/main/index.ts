@@ -42,6 +42,29 @@ function createWindow(): void {
     }
   });
 
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error(`Renderer failed to load (${errorCode}): ${errorDescription} — ${validatedURL}`);
+  });
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('Renderer process exited:', details);
+  });
+
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (level >= 2) {
+      console.error(`Renderer console error (${sourceId}:${line}): ${message}`);
+    }
+  });
+
+  mainWindow.webContents.on('did-finish-load', async () => {
+    try {
+      const visibleText = await mainWindow?.webContents.executeJavaScript('document.body.innerText');
+      console.info(`Renderer loaded ${mainWindow?.webContents.getURL()} — ${String(visibleText).trim().slice(0, 200)}`);
+    } catch (error) {
+      console.error('Could not inspect renderer after load:', error);
+    }
+  });
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     // Prevent opening new windows
     return { action: 'deny' };
@@ -66,13 +89,19 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
+    const devRendererUrl = is.dev ? process.env['ELECTRON_RENDERER_URL'] : undefined;
+    const devRendererOrigin = devRendererUrl ? new URL(devRendererUrl).origin : undefined;
+    const devRendererWebSocketOrigin = devRendererOrigin?.replace(/^http/, 'ws');
+
     // Set security headers
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      const developmentScriptPolicy = devRendererUrl ? " 'unsafe-inline'" : '';
+      const developmentConnectPolicy = [devRendererOrigin, devRendererWebSocketOrigin].filter(Boolean).join(' ');
       callback({
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ${__BCIS_API_ORIGIN__}`,
+            `default-src 'self'; script-src 'self'${developmentScriptPolicy}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ${__BCIS_API_ORIGIN__} ${developmentConnectPolicy}`,
           ],
         },
       });
