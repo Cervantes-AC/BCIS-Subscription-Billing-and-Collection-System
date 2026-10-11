@@ -81,7 +81,7 @@ From the project root, start both API and desktop app:
 pnpm dev
 ```
 
-The API listens at `http://localhost:3000`. Its health check is `http://localhost:3000/health`, and interactive API documentation is at `http://localhost:3000/documentation`. The Electron desktop window opens separately.
+The API listens on port 3000. For local checks, use `http://127.0.0.1:3000/health`; interactive API documentation is at `http://127.0.0.1:3000/documentation`. The Electron desktop window opens separately.
 
 To run either part on its own, use two PowerShell terminals:
 
@@ -95,7 +95,7 @@ pnpm --filter @bcis/api run dev
 pnpm --filter @bcis/desktop run dev
 ```
 
-The desktop app defaults to `http://localhost:3000/api/v1`. If the API runs at a different address, set `VITE_API_URL` before building the desktop app; see the deployment guide for a LAN example.
+The desktop app defaults to `http://127.0.0.1:3000/api/v1` on the same computer. If the API runs at a different address, set `VITE_API_URL` before building the desktop app; see the deployment guide for a LAN example.
 
 ## Build and code checks
 
@@ -145,7 +145,7 @@ The documented acceptance scenarios are AT-01 through AT-12. Some require manual
 - **API cannot connect to PostgreSQL:** Check that PostgreSQL is running and that `DATABASE_URL` in `.env` has the right database name and credentials. For Docker, check `docker compose ps`.
 - **Database or relation does not exist:** Run `pnpm db:migrate`, then `pnpm db:seed`.
 - **Port 3000 or 5432 is already in use:** Stop the other service or adjust its port and corresponding configuration.
-- **Desktop reports a network error:** Check `http://localhost:3000/health` first. Confirm the desktop app's API URL points to the running API; for custom addresses, rebuild with the matching `VITE_API_URL`.
+- **Desktop reports a network error:** Check `http://127.0.0.1:3000/health` first. Confirm the desktop app's API URL points to the running API; for custom addresses, rebuild with the matching `VITE_API_URL`.
 - **Desktop window is blank or does not open:** Check the desktop terminal for startup errors. The dev launcher clears `ELECTRON_RUN_AS_NODE` automatically; if launching Electron another way, clear it in PowerShell with `$env:ELECTRON_RUN_AS_NODE = $null` and restart the desktop process.
 - **Need to reset a development database:** This deletes existing data. Back it up first, or use a newly created disposable database for testing.
 

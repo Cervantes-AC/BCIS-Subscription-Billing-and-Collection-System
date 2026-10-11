@@ -2,7 +2,7 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
-const apiOrigin = new URL(process.env.VITE_API_URL || 'http://localhost:3000/api/v1').origin;
+const apiOrigin = new URL(process.env.VITE_API_URL || 'http://127.0.0.1:3000/api/v1').origin;
 
 export default defineConfig({
   main: {
