@@ -1,209 +1,157 @@
-﻿# BCIS-Subscription-Billing-and-Collection-System
+# BCIS Subscription Billing and Collection System
 
-A comprehensive desktop application for Bukidnon Cable and Internet Services - Subscription Billing, Collection, and Subscriber Ledger System.
+A Windows desktop application for managing cable and internet subscribers, recurring bills, payments, collections, receivables, reports, and administration. The Electron desktop app connects to a Fastify API, which stores data in PostgreSQL.
 
-## Architecture
+## How the pieces connect
 
-```
-PC 1 (Owner/Admin) ──┐
-PC 2 (Cashier)      ├── LAN ──► Fastify API Server ──► PostgreSQL
-PC 3 (Operations)   └┘
-```
-
-- **Desktop**: Electron + React + TypeScript + Tailwind CSS
-- **API**: Fastify + TypeScript + Drizzle ORM
-- **Database**: PostgreSQL 16+
-
-## Quick Start
-
-### Prerequisites
-
-1. **Node.js 20+** and **pnpm 9+**
-2. **PostgreSQL 16+** (or use Docker)
-
-### Option 1: Docker (Easiest)
-
-```bash
-# Start PostgreSQL + pgAdmin
-docker-compose up -d
-
-# Verify
-docker ps
-# Should show bcis-postgres and bcis-pgadmin running
-
-# pgAdmin: http://localhost:5050 (admin@bcis.local / admin123)
+```text
+Electron desktop app  ──HTTP──>  Fastify API  ──>  PostgreSQL
+      (React UI)                  (port 3000)       (port 5432)
 ```
 
-### Option 2: Local PostgreSQL
+The desktop app and API can run on one development computer. For multiple office PCs, keep PostgreSQL and the API on a host computer, then configure each desktop build to use that host's API address. See [docs/deployment-guide.md](docs/deployment-guide.md) for LAN setup.
 
-1. Install PostgreSQL 16+
-2. Add `C:\Program Files\PostgreSQL\16\bin` to PATH
-3. Restart terminal
-4. Create database:
-```sql
-CREATE DATABASE bcis_billing;
-CREATE USER postgres WITH PASSWORD 'postgres';
-GRANT ALL PRIVILEGES ON DATABASE bcis_billing TO postgres;
+## Requirements
+
+- Windows 10/11 (the instructions below use PowerShell)
+- Node.js 20.19 or newer
+- pnpm 9 or newer
+- PostgreSQL 16 or newer, either installed locally or run with Docker Desktop
+- Git, if cloning the repository
+
+Check the installed tools:
+
+```powershell
+node --version
+pnpm --version
+docker --version
 ```
 
-### Setup Database
+Docker is only required if you choose the Docker database option.
 
-```bash
-# Install dependencies
+## First-time setup
+
+Open PowerShell in the project folder (the folder containing this README), then install dependencies and create your local environment file:
+
+```powershell
 pnpm install
-
-# Run migrations
-pnpm --filter @bcis/db run migrate
-
-# Seed demo data
-pnpm --filter @bcis/db run seed
-
-# Or run all at once with setup script
-pnpm tsx scripts/setup-db.ts
-# Or with Docker
-pnpm tsx scripts/setup-db.ts --use-docker
+Copy-Item .env.example .env
 ```
 
-### Start Development
+Edit `.env` and set `DATABASE_URL` for your PostgreSQL database. For local development, the default in `.env.example` is:
 
-```bash
-# Start all (API + Desktop)
+```text
+postgresql://postgres:postgres@localhost:5432/bcis_billing
+```
+
+Change `JWT_SECRET` to a private random value of at least 32 characters. Do not commit or share `.env`.
+
+### Start PostgreSQL with Docker
+
+If Docker Desktop is installed and running, start the database from the project folder:
+
+```powershell
+docker compose up -d postgres
+```
+
+The Compose file configures a local development database named `bcis_billing`, with user `postgres` and password `postgres`. These sample credentials are for a local development machine only. To stop the database later, run `docker compose down`; the database data is kept in a Docker volume. To remove that data too, use `docker compose down -v` (this permanently deletes the local database volume).
+
+Alternatively, install PostgreSQL 16 locally and update `DATABASE_URL` in `.env` to match the database, username, and password you created.
+
+### Create tables and initial accounts
+
+With PostgreSQL running and `.env` configured, run:
+
+```powershell
+pnpm db:migrate
+pnpm db:seed
+```
+
+The seed creates initial roles, plans, and login accounts. In this development seed, the usernames are `admin`, `cashier`, `collector_supervisor`, `accounting`, `technician`, and `viewer`; their initial password is `admin123`. Change these passwords before anyone else accesses the system. The demo data seed is separate and should only be used in a disposable database:
+
+```powershell
+pnpm --filter @bcis/db run seed:demo
+```
+
+## Run the application
+
+From the project root, start both API and desktop app:
+
+```powershell
 pnpm dev
-
-# Or individually:
-pnpm --filter @bcis/api run dev      # API on http://localhost:3000
-pnpm --filter @bcis/desktop run dev  # Electron desktop app
 ```
 
-## Demo Credentials
+The API listens at `http://localhost:3000`. Its health check is `http://localhost:3000/health`, and interactive API documentation is at `http://localhost:3000/documentation`. The Electron desktop window opens separately.
 
-| Username | Password | Role |
-|----------|----------|------|
-| admin | admin123 | Super Admin |
-| cashier | admin123 | Cashier |
-| collector_supervisor | admin123 | Collection Supervisor |
-| accounting | admin123 | Accounting |
-| technician | admin123 | Technician |
-| viewer | admin123 | Viewer |
+To run either part on its own, use two PowerShell terminals:
 
-## Project Structure
-
-```
-BCIS-Subscription-Billing-System/
-├── packages/
-│   ├── shared/          # Types, Zod schemas, utilities
-│   ├── db/              # PostgreSQL + Drizzle ORM
-│   ├── api/             # Fastify API server
-│   └── desktop/         # Electron + React app
-├── scripts/
-│   ├── setup-db.ts      # Database setup script
-│   └── setup-db.ps1     # PowerShell setup script
-├── docker-compose.yml   # PostgreSQL + pgAdmin
-├── .env.example         # Environment template
-├── pnpm-workspace.yaml
-└── package.json
+```powershell
+# Terminal 1: API
+pnpm --filter @bcis/api run dev
 ```
 
-## Available Scripts
+```powershell
+# Terminal 2: desktop app
+pnpm --filter @bcis/desktop run dev
+```
 
-```bash
-# Development
-pnpm dev                          # Start API + Desktop
-pnpm --filter @bcis/api run dev   # API only
-pnpm --filter @bcis/desktop run dev  # Desktop only
+The desktop app defaults to `http://localhost:3000/api/v1`. If the API runs at a different address, set `VITE_API_URL` before building the desktop app; see the deployment guide for a LAN example.
 
-# Database
-pnpm --filter @bcis/db run generate  # Generate migrations
-pnpm --filter @bcis/db run migrate   # Run migrations
-pnpm --filter @bcis/db run push      # Push schema changes
-pnpm --filter @bcis/db run seed      # Seed demo data
-pnpm --filter @bcis/db run studio    # Open Drizzle Studio
+## Build and code checks
 
-# Build
-pnpm build                        # Build all packages
-pnpm --filter @bcis/desktop run build  # Build desktop app (installer)
+Run these from the project root:
 
-# Testing
-pnpm test                         # Run all tests
-pnpm --filter @bcis/api run test:unit
-pnpm --filter @bcis/desktop run test:e2e
-
-# Linting
+```powershell
+pnpm build
 pnpm lint
-pnpm format                       # Prettier format
+pnpm -r --if-present typecheck
 ```
 
-## API Documentation
+`pnpm build` builds shared code, database package, API, and desktop app. To package just the desktop app:
 
-- **Swagger UI**: http://localhost:3000/documentation
-- **Health Check**: http://localhost:3000/health
-
-## Default Ports
-
-| Service | Port |
-|---------|------|
-| API Server | 3000 |
-| PostgreSQL | 5432 |
-| pgAdmin | 5050 |
-| Desktop Dev Server | 5173 |
-
-## Environment Variables
-
-Copy `.env.example` to `.env` and modify:
-
-```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/bcis_billing
-JWT_SECRET=your-secret-key-min-32-chars
-PORT=3000
-NODE_ENV=development
+```powershell
+pnpm build:desktop
 ```
+
+## Tests
+
+```powershell
+pnpm test                 # API service unit tests
+pnpm test:integration     # opt-in acceptance integration checks
+pnpm test:e2e             # Electron desktop smoke test
+```
+
+The integration and desktop end-to-end tests require a migrated, synthetically seeded **disposable test database**. Follow [tests/acceptance/README.md](tests/acceptance/README.md) for the required environment variables and instructions. Never point acceptance tests at production or real subscriber data. The desktop smoke test signs in, visits key screens, and signs out; it does not cover all billing, payment, collection, or backup transactions. The three-PC LAN checklist is in [tests/acceptance/lan-validation.md](tests/acceptance/lan-validation.md).
+
+The documented acceptance scenarios are AT-01 through AT-12. Some require manual or environment-specific validation; a scenario is only complete when its result has been observed and recorded in the acceptance evidence files.
+
+## Useful commands
+
+| Command | Purpose |
+| --- | --- |
+| `pnpm dev` | Start API and desktop in development |
+| `pnpm db:migrate` | Apply database migrations |
+| `pnpm db:seed` | Create initial roles, plans, and users |
+| `pnpm --filter @bcis/db run seed:demo` | Add synthetic demo records (test databases only) |
+| `pnpm db:studio` | Open Drizzle Studio for database inspection |
+| `pnpm build` | Build all packages |
+| `pnpm lint` | Run ESLint across workspace packages |
+| `pnpm test` | Run API unit tests |
+| `pnpm test:integration` | Run opt-in API acceptance integration tests |
+| `pnpm test:e2e` | Run the desktop Playwright smoke test |
 
 ## Troubleshooting
 
-### PostgreSQL Connection Failed
-```bash
-# Check if PostgreSQL is running
-psql --version
-# or
-docker ps | grep postgres
+- **API cannot connect to PostgreSQL:** Check that PostgreSQL is running and that `DATABASE_URL` in `.env` has the right database name and credentials. For Docker, check `docker compose ps`.
+- **Database or relation does not exist:** Run `pnpm db:migrate`, then `pnpm db:seed`.
+- **Port 3000 or 5432 is already in use:** Stop the other service or adjust its port and corresponding configuration.
+- **Desktop reports a network error:** Check `http://localhost:3000/health` first. Confirm the desktop app's API URL points to the running API; for custom addresses, rebuild with the matching `VITE_API_URL`.
+- **Need to reset a development database:** This deletes existing data. Back it up first, or use a newly created disposable database for testing.
 
-# Check connection
-psql "postgresql://postgres:postgres@localhost:5432/bcis_billing" -c "SELECT 1;"
-```
+## More documentation
 
-### Migration Errors
-```bash
-# Reset database (WARNING: destroys data)
-dropdb bcis_billing
-createdb bcis_billing
-pnpm --filter @bcis/db run migrate
-pnpm --filter @bcis/db run seed
-```
+- [Deployment and LAN guide](docs/deployment-guide.md)
+- [Acceptance and test instructions](tests/acceptance/README.md)
+- [Implementation plan](IMPLEMENTATION_PLAN.md)
 
-### Port Already in Use
-```bash
-# Kill process on port 3000
-npx kill-port 3000
-# or change PORT in .env
-```
-
-## Acceptance Tests (AT-01 to AT-12)
-
-All mandatory tests are implemented:
-- AT-01: Exact payment → invoice PAID, ledger balanced
-- AT-02: Partial payment → correct remaining balance
-- AT-03: Advance payment → credit preserved
-- AT-04: Oldest-first arrears allocation
-- AT-05: Duplicate GCash reference blocked
-- AT-06: Payment reversal preserves history
-- AT-07: Collector balanced remittance
-- AT-08: Collector shortage displayed
-- AT-09: Concurrent users (3 PCs)
-- AT-10: Server-side authorization
-- AT-11: Duplicate billing prevention
-- AT-12: Backup/restore integrity
-
-## License
-
-Educational/Laboratory Project - BCIS Subscription Billing System
-
+This is an educational/laboratory project for Bukidnon Cable and Internet Services.
